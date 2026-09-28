@@ -40,6 +40,9 @@ See also:
 - The Windows OpenSSH client, `%SystemRoot%\System32\OpenSSH\ssh.exe`.
 - Network access to zlib.net and GitHub for the first configuration. Every
   download is verified against a pinned SHA-256.
+- A short checkout path: the dependency build trees are deeply nested and
+  `mingw32-make` does not support paths beyond `MAX_PATH` (see
+  [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)).
 
 To pin a toolchain for plain `cmake --preset` use without environment
 variables, create a `CMakeUserPresets.json` (ignored by Git):

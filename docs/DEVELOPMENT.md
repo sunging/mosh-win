@@ -16,6 +16,12 @@ accept `-MingwRoot` and resolve it the same way (`Get-MingwRoot` in
 `scripts/MoshWin.psm1`). Machine-specific settings belong in an untracked
 `CMakeUserPresets.json` (see the README), never in `CMakePresets.json`.
 
+Keep the checkout path short (for example `C:\src\mosh-win`). FetchContent
+creates deeply nested stamp files under `out/build/<preset>/_deps/`, and
+`mingw32-make` is not long-path aware, so a checkout path much longer than
+about 60 characters makes the first configuration fail with
+`No rule to make target '.../download-mosh_upstream-populate.cmake'`.
+
 ## Presets and options
 
 | Preset | Build type | `MOSH_REQUIRE_COMPLETE_PORT` | Binary directory |
