@@ -1,3 +1,4 @@
+#include "platform/utf8.h"
 #include "platform/win32_socket.h"
 
 #include <algorithm>
@@ -103,11 +104,27 @@ void ipv6_smoke_test() {
   }
 }
 
+void error_text_test() {
+  /* The client shows this text in its UTF-8 overlay; it must never be in the
+     ANSI code page, whatever the system UI language is. */
+  const std::string text = mosh::win32::socket_error_text(WSAECONNRESET);
+  expect(!text.empty(), "WSAECONNRESET has no error text");
+  expect(text.back() != '.' && text.back() != '\n',
+         "error text keeps trailing punctuation");
+  const std::u32string decoded = mosh::win32::utf8::decode(text);
+  expect(std::find(decoded.begin(), decoded.end(),
+                   mosh::win32::utf8::replacement_character) == decoded.end(),
+         "error text is not valid UTF-8");
+  expect(mosh::win32::socket_error_text(0x7FFFFFFF) == "Winsock error",
+         "unknown error code must use the generic fallback");
+}
+
 } // namespace
 
 int main() {
   mosh::win32::WinsockRuntime winsock;
   ipv4_event_test();
   ipv6_smoke_test();
+  error_text_test();
   return 0;
 }

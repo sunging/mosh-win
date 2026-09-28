@@ -1,11 +1,10 @@
 /* GPL-3.0-or-later */
 #include "win32_console.h"
+#include "win32_error.h"
 
 #include <algorithm>
 #include <array>
 #include <limits>
-#include <sstream>
-#include <system_error>
 
 namespace mosh::win32 {
 namespace {
@@ -15,9 +14,14 @@ constexpr std::size_t max_input_buffer = 1024U * 1024U;
 
 [[nodiscard]] std::string windows_error_message(const char *operation,
                                                 DWORD error) {
-  std::ostringstream out;
-  out << operation << " failed (Windows error " << error << ')';
-  return out.str();
+  std::string message = std::string(operation) + " failed (Windows error " +
+                        std::to_string(error) + ')';
+  const std::string text = system_error_text(error);
+  if (!text.empty()) {
+    message += ": ";
+    message += text;
+  }
+  return message;
 }
 
 [[noreturn]] void throw_last_error(const char *operation) {

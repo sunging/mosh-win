@@ -1,11 +1,9 @@
 /* GPL-3.0-or-later */
 #include "win32_socket.h"
+#include "win32_error.h"
 
 #include <algorithm>
-#include <atomic>
-#include <limits>
 #include <mutex>
-#include <sstream>
 
 namespace mosh::win32 {
 namespace {
@@ -28,23 +26,8 @@ SocketError::SocketError(const char *operation, int error)
     : std::runtime_error(error_message(operation, error)), error_(error) {}
 
 std::string socket_error_text(int error) {
-  char *message = nullptr;
-  const DWORD size = FormatMessageA(
-      FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM |
-          FORMAT_MESSAGE_IGNORE_INSERTS,
-      nullptr, static_cast<DWORD>(error), 0,
-      reinterpret_cast<char *>(&message), 0, nullptr);
-  if (size == 0 || message == nullptr) {
-    return "Winsock error";
-  }
-  std::string result(message, size);
-  LocalFree(message);
-  while (!result.empty() &&
-         (result.back() == '\r' || result.back() == '\n' ||
-          result.back() == ' ' || result.back() == '.')) {
-    result.pop_back();
-  }
-  return result;
+  std::string text = system_error_text(static_cast<std::uint32_t>(error));
+  return text.empty() ? std::string("Winsock error") : text;
 }
 
 WinsockRuntime::WinsockRuntime() {

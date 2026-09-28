@@ -70,6 +70,8 @@ set(_mosh_platform_sources
   "${PROJECT_SOURCE_DIR}/src/platform/win32_socket.h"
   "${PROJECT_SOURCE_DIR}/src/platform/win32_crypto.cc"
   "${PROJECT_SOURCE_DIR}/src/platform/win32_crypto.h"
+  "${PROJECT_SOURCE_DIR}/src/platform/win32_error.cc"
+  "${PROJECT_SOURCE_DIR}/src/platform/win32_error.h"
   "${PROJECT_SOURCE_DIR}/src/platform/utf8.cc"
   "${PROJECT_SOURCE_DIR}/src/platform/utf8.h")
 _mosh_sources_ready(_platform_ready "Win32 platform" ${_mosh_platform_sources})
