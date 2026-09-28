@@ -1,73 +1,118 @@
 # mosh-win
 
-`mosh-win` 是官方 Mosh 1.4.0 的 x64 Windows 原生客户端移植工程。它只构建客户端，不包含 Windows 版 `mosh-server`。
+`mosh-win` is a native x64 Windows client port of [Mosh](https://mosh.org/)
+1.4.0, the mobile shell. It builds only the client; there is no Windows
+`mosh-server`.
 
-发布包包含两个 Windows PE 程序。第三方库及 MinGW 运行库均静态链接；
-Windows 系统 DLL（UCRT API-set、Kernel32、Winsock 和 CNG）由操作系统提供：
+A release contains two Windows PE programs. All third-party libraries and the
+MinGW runtime are linked statically; only Windows system DLLs (the UCRT API
+sets, Kernel32, Winsock and CNG) are used at run time:
 
-- `mosh.exe`：使用 Windows 系统 OpenSSH 登录远端、启动 Linux `mosh-server`，然后启动本地客户端。
-- `mosh-client.exe`：执行 Mosh 的加密 UDP 协议、状态同步、漫游恢复和 VT 终端显示。
+- `mosh.exe` — logs in with the Windows OpenSSH client, starts the Linux
+  `mosh-server` on the remote host, then launches the local client.
+- `mosh-client.exe` — speaks Mosh's encrypted UDP protocol: state
+  synchronization, roaming, prediction and VT terminal rendering.
 
-目标平台为 x64 Windows 10 22H2 或 Windows 11，以及 Windows Terminal/ConPTY 等支持 VT 的现代终端。项目不依赖 Cygwin、MSYS2、OpenSSL 或 ncurses 运行时。
+Supported targets are x64 Windows 10 22H2 and Windows 11 with a VT-capable
+terminal such as Windows Terminal / ConPTY. Nothing depends on Cygwin, MSYS2,
+OpenSSL or ncurses at run time.
 
-## 前置条件
+See also:
 
-- CMake 3.28 或更高版本。
-- x86_64 MinGW-w64 UCRT 工具链（GCC 15.1.0）；通过 `-DMINGW64_ROOT`、环境变量 `MINGW64_ROOT` 或 `PATH` 上的 `gcc.exe` 定位。CMake 会强制校验 x64、UCRT 和 GCC 15.1.0。
-- Git（只用于幂等地应用上游补丁）。
-- Windows 自带的 `C:\Windows\System32\OpenSSH\ssh.exe`。
-- 第一次配置时能访问 zlib.net 和 GitHub；所有下载都校验 SHA-256。
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — components, bootstrap and
+  event loop, key handling, reproducible builds.
+- [docs/PATCHES.md](docs/PATCHES.md) — what the upstream patch series changes
+  and how to maintain it.
+- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — build options, tests, coding
+  conventions.
+- [CHANGELOG.md](CHANGELOG.md)
 
-## 构建
+## Prerequisites
 
-在普通 PowerShell 中运行：
+- CMake 3.28 or newer.
+- The x86_64 MinGW-w64 **UCRT** toolchain with GCC 15.1.0. Configuration
+  fails unless the compiler is x64, targets UCRT and is exactly GCC 15.1.0.
+  The toolchain is located, in this order, from:
+  1. `-DMINGW64_ROOT=<dir>` (or `-MingwRoot <dir>` for the scripts),
+  2. the `MINGW64_ROOT` environment variable,
+  3. the directory containing `gcc.exe` on `PATH`.
+- Git (used only to apply the upstream patches idempotently).
+- The Windows OpenSSH client, `%SystemRoot%\System32\OpenSSH\ssh.exe`.
+- Network access to zlib.net and GitHub for the first configuration. Every
+  download is verified against a pinned SHA-256.
+
+To pin a toolchain for plain `cmake --preset` use without environment
+variables, create a `CMakeUserPresets.json` (ignored by Git):
+
+```json
+{
+  "version": 6,
+  "configurePresets": [
+    {
+      "name": "local-release",
+      "inherits": "mingw64-release",
+      "cacheVariables": { "MINGW64_ROOT": "C:/path/to/mingw64" }
+    }
+  ]
+}
+```
+
+## Building
+
+From a regular PowerShell prompt:
 
 ```powershell
 Set-Location <path-to-mosh-win>
 powershell -ExecutionPolicy Bypass -File .\scripts\build.ps1 -Configuration Release
 ```
 
-开发构建允许在移植文件尚未齐全时完成 CMake 配置：
+A development build may be configured while port sources are still missing:
 
 ```powershell
 cmake --preset mingw64-dev
 cmake --build --preset mingw64-dev
 ```
 
-Release 预设启用 `MOSH_REQUIRE_COMPLETE_PORT=ON`，任何缺失的客户端或平台源文件都会令配置失败。当前构建目录的下载缓存已经存在时可用离线模式：
+The release preset sets `MOSH_REQUIRE_COMPLETE_PORT=ON`, so any missing client
+or platform source fails configuration. Once the build directory already holds
+the downloaded dependencies, offline mode avoids the network:
 
 ```powershell
 .\scripts\build.ps1 -Configuration Release -Offline
 ```
 
-对应源码包解压后的 `third_party/source` 可直接用于完全离线构建。在
-`mosh-win` 子目录运行：
+The `third_party/source` directory of the corresponding-source package allows a
+fully offline build. From its `mosh-win` subdirectory run:
 
 ```powershell
 .\scripts\build.ps1 -Configuration Release -Clean -Offline `
   -DependencySourceRoot ..\third_party\source
 ```
 
-依赖锁定如下：
+Pinned dependencies:
 
-| 依赖 | 版本 | SHA-256 |
+| Dependency | Version | SHA-256 |
 | --- | --- | --- |
 | Mosh | 1.4.0 (`bc73a263`) | `ae581fbddf038730af9eee4d319a483288395a0722d0c94c7efb7fdbdbb0dbac` |
 | protobuf C++ | 3.21.12 / v21.12 | `4eab9b524aa5913c6fffb20b2a8abf5ef7f95a80bc0701f3a6dbb4c607f73460` |
 | zlib | 1.3.1 | `9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23` |
 
-protobuf 和 zlib 只以静态库链接。Mosh 自身的归档只作为上游源码输入，不使用其 Autotools 构建，也不构建 `mosh-server`。
+protobuf and zlib are linked only as static libraries. The Mosh archive is used
+purely as source input: its Autotools build is not used and `mosh-server` is
+not built.
 
-终端宽度表固定使用 Unicode 17.0.0。生成后的 C++ 表已签入源码，正常构建不依赖 Python 或联网；维护者可用下列命令校验官方数据哈希并重生成：
+Terminal character widths follow Unicode 17.0.0. The generated C++ table is
+checked in, so a normal build needs neither Python nor network access.
+Maintainers can verify the official data hashes and regenerate it with:
 
 ```powershell
 python .\scripts\generate-unicode-width.py --download
 python .\scripts\generate-unicode-width.py --check
 ```
 
-## 使用
+## Usage
 
-最常见的调用方式：
+Typical invocations:
 
 ```powershell
 .\mosh.exe user@example.com
@@ -75,9 +120,13 @@ python .\scripts\generate-unicode-width.py --check
 .\mosh.exe --ssh-option=-i --ssh-option=$env:USERPROFILE\.ssh\id_ed25519 user@example.com
 ```
 
-启动器复用 `%USERPROFILE%\.ssh\config`、Windows ssh-agent、主机密钥确认和密码提示。远端必须安装兼容的 `mosh-server`，且客户端能够直接访问服务器选择的 UDP 端口（默认范围通常为 60000–61000）。SSH 的 ProxyJump 只负责启动阶段，不会转发 Mosh UDP 流量。
+The launcher reuses `%USERPROFILE%\.ssh\config`, the Windows ssh-agent, host
+key confirmation and password prompts. The remote host needs a compatible
+`mosh-server`, and the client must be able to reach the UDP port the server
+picks (usually in 60000–61000). An SSH `ProxyJump` only covers the bootstrap;
+it does not forward Mosh's UDP traffic. Run `mosh.exe --help` for all options.
 
-底层接口也可直接使用：
+The client can also be started directly:
 
 ```powershell
 $env:MOSH_KEY = '<22-character-key>'
@@ -85,78 +134,106 @@ $env:MOSH_KEY = '<22-character-key>'
 Remove-Item Env:MOSH_KEY
 ```
 
-正常使用时不要手工设置密钥；`mosh.exe` 会为子进程构建专用环境并在创建进程后清理内存中的密钥。
+Do not set the key by hand in normal use: `mosh.exe` builds a dedicated
+environment for the child process and wipes the key from its own memory after
+the process is created.
 
-## 测试
+The client honours the upstream environment variables `MOSH_ESCAPE_KEY`,
+`MOSH_PREDICTION_DISPLAY`, `MOSH_PREDICTION_OVERWRITE`, `MOSH_TITLE_NOPREFIX`
+and `MOSH_NO_TERM_INIT`. Suspend (`Ctrl-^ Ctrl-Z`) is not available on Windows.
+
+## Testing
 
 ```powershell
 .\scripts\test.ps1 -Configuration Release
 ```
 
-测试脚本运行 CTest，然后检查两个 EXE 的 PE 导入表。当前 12 项 CTest 覆盖
-OCB/RFC 向量和篡改拒绝、随机数/base64、protobuf/zlib 状态同步、Unicode
-framebuffer、resize/alternate screen、控制台恢复、IPv4/IPv6，以及真实 loopback
-UDP 上的丢包、重复、乱序、源端口漫游和虚拟 15 秒断网恢复。启动器测试使用伪
-`ssh.exe` 检查 Windows 参数引用、远端 shell 引用、启动信息解析和失败路径。
-PE 审计会拒绝 Cygwin/MSYS、MinGW C++ 运行时、OpenSSL、protobuf、zlib 和
-ncurses DLL。
+The script runs CTest and then checks the PE import tables of both
+executables. The 12 CTest tests cover the OCB/RFC vectors and tamper rejection,
+the RNG and base64, protobuf/zlib state synchronization, the Unicode
+framebuffer, resize and the alternate screen, console restoration, IPv4/IPv6
+sockets and UTF-8 error text, and — over real loopback UDP — loss,
+duplication, reordering, source-port roaming and recovery from a virtual
+15-second outage. The launcher tests use a fake `ssh.exe` to check Windows
+argument quoting, remote shell quoting, bootstrap parsing and failure paths.
+The PE audit rejects Cygwin/MSYS, MinGW C++ runtime, OpenSSL, protobuf, zlib
+and ncurses DLLs.
 
-仓库中的 `tests/wsl/run-e2e.ps1` 可针对 WSL2 Ubuntu 临时启动高端口 `sshd` 和 Linux `mosh-server`，进行 Windows OpenSSH → Linux 服务端 → 原生 UDP 客户端互操作测试。测试夹具不安装 Windows 服务、不保存凭据，完成后应停止临时进程。
+`tests/wsl/run-e2e.ps1` runs an interoperability test against WSL2 Ubuntu: it
+starts a temporary high-port `sshd` and the Linux `mosh-server`, then goes
+Windows OpenSSH → Linux server → native UDP client. The fixture installs no
+Windows service, stores no credentials, and its temporary processes should be
+stopped afterwards.
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\tests\wsl\run-e2e.ps1 `
   -Distro Ubuntu -InstallOpenSshServer
 ```
 
-`-InstallOpenSshServer` 只在 WSL 发行版缺少 `sshd` 时安装软件包；夹具始终以
-临时配置、高端口和临时密钥运行，不启用常驻服务。部分 Windows OpenSSH 9.5
-版本在远端命令成功后仍可能触发
-[Win32-OpenSSH #1899](https://github.com/PowerShell/Win32-OpenSSH/issues/1899)
-并返回异常退出码。启动器只在已经严格解析到有效 `MOSH CONNECT` 后容忍该
-退出，同时发出警告；连接信息缺失或格式错误仍然失败。
+`-InstallOpenSshServer` installs packages only if the distribution lacks
+`sshd`; the fixture always runs with a temporary configuration, a high port and
+a temporary key, and never enables a persistent service. Some Windows OpenSSH
+9.5 builds can return an abnormal exit code even after the remote command
+succeeded ([Win32-OpenSSH #1899](https://github.com/PowerShell/Win32-OpenSSH/issues/1899)).
+The launcher tolerates that exit only after it has strictly parsed a valid
+`MOSH CONNECT` line, and prints a warning; missing or malformed connection
+information still fails.
 
-可复现性验收会在两个不同的干净 Release 目录构建并逐一比较两个 EXE 的
-SHA-256（不宣称 ZIP 容器本身逐字节可复现）：
+The reproducibility check builds two clean release directories and compares
+the SHA-256 of both executables (the ZIP containers themselves are not claimed
+to be byte-for-byte reproducible):
 
 ```powershell
 .\scripts\verify-reproducible.ps1
 ```
 
-## 打包
+## Packaging
 
 ```powershell
 .\scripts\package.ps1
 ```
 
-如果 Release 是用外置的离线依赖源码构建的，可显式把同一源码目录交给打包器：
+If the release was built from external offline dependency sources, pass the
+same directory to the packager:
 
 ```powershell
 .\scripts\package.ps1 -SkipBuild `
   -DependencySourceRoot ..\third_party\source
 ```
 
-命令在 `dist/` 中生成：
+This writes to `dist/`:
 
-- `mosh-win-1.4.0-win1-x64.zip`：两个 EXE、README、许可证、第三方声明、静态运行库/OCB 许可文本和 SHA-256 清单。
-- `mosh-win-1.4.0-win1-source.zip`：当前工程、补丁以及 CMake 实际展开的 Mosh/protobuf/zlib 对应源码。
-- `SHA256SUMS.txt`：两个 ZIP 自身的 SHA-256。
+- `mosh-win-<version>-x64.zip` — both executables, README, license, third-party
+  notices, static runtime and OCB license texts, and a SHA-256 manifest.
+- `mosh-win-<version>-source.zip` — this project, its patches and the Mosh,
+  protobuf and zlib sources that CMake actually used.
+- `SHA256SUMS.txt` — SHA-256 of both ZIP files.
 
-可以单独执行 `scripts/audit-pe-imports.ps1` 审计任意产物：
+The version comes from `CMakeLists.txt`. The import audit can also be run on
+any binary:
 
 ```powershell
 .\scripts\audit-pe-imports.ps1 -Binary .\out\build\mingw64-release\bin\mosh.exe
 ```
 
-## 移植结构
+## Layout
 
-- `src/platform/`：Win32 控制台、Winsock、CNG 和 UTF-8 平台层。
-- `src/client/`：Windows 客户端入口和事件循环。
-- `src/launcher/`：OpenSSH 启动器、参数引用和子进程环境管理。
-- `patches/series`：按顺序应用到固定 Mosh 1.4.0 源码的补丁列表。
-- `cmake/`：固定工具链、依赖、target 和补丁应用逻辑。
+- `src/platform/` — Win32 console, Winsock, CNG, error text and UTF-8 layer.
+- `src/client/` — Windows client entry point and event loop.
+- `src/launcher/` — OpenSSH launcher, argument quoting and child environment.
+- `patches/series` — ordered patches applied to the pinned Mosh 1.4.0 source.
+- `cmake/` — toolchain, dependencies, targets and patch application.
+- `scripts/` — build, test and packaging scripts sharing `MoshWin.psm1`.
+- `tests/` — CTest suites, launcher fixtures and the WSL end-to-end test.
 
-FetchContent 的上游目录属于构建产物。不要直接编辑 `out/build/*/_deps/mosh_upstream-src`；应把修改维护为 `patches/` 中的补丁，以便 clean build 可重现。
+The FetchContent upstream directory is a build artifact. Do not edit
+`out/build/*/_deps/mosh_upstream-src`; keep changes as patches in `patches/`
+so that clean builds stay reproducible (see [docs/PATCHES.md](docs/PATCHES.md)).
 
-## 许可证
+## License
 
-本工程和 Mosh 派生代码按 GPL-3.0-or-later 分发。二进制分发必须同时满足 GPL 对应源码要求；默认打包流程因此会生成 source bundle。protobuf 使用 BSD-3-Clause，zlib 使用 zlib License，详情见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+This project and the Mosh-derived code are distributed under
+GPL-3.0-or-later. Binary distributions must also satisfy the GPL's
+corresponding-source requirement, which is why the default packaging flow
+produces a source bundle. protobuf is BSD-3-Clause and zlib uses the zlib
+License; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
