@@ -42,7 +42,4 @@ std::wstring ResolveNumericAddress(const std::wstring& host,
                                    AddressFamily family,
                                    bool numeric_only);
 
-void SecureWipe(std::string& value) noexcept;
-void SecureWipe(std::wstring& value) noexcept;
-
 }  // namespace mosh::launcher

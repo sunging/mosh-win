@@ -5,14 +5,11 @@
 #include <ws2tcpip.h>
 #include <windows.h>
 
-#include <algorithm>
 #include <array>
-#include <cstdio>
 #include <cwchar>
 #include <exception>
 #include <map>
 #include <memory>
-#include <sstream>
 #include <utility>
 
 namespace mosh::launcher {
@@ -264,21 +261,69 @@ std::uint32_t WaitAndGetExitCode(HANDLE process) {
   return exit_code;
 }
 
-PROCESS_INFORMATION StartProcess(
-    const std::wstring& executable,
-    std::vector<wchar_t>* command_line,
-    STARTUPINFOW* startup,
-    bool inherit_handles,
-    std::vector<wchar_t>* environment_block) {
-  PROCESS_INFORMATION process{};
-  const DWORD flags = environment_block ? CREATE_UNICODE_ENVIRONMENT : 0;
-  if (!CreateProcessW(executable.c_str(), command_line->data(), nullptr, nullptr,
-                      inherit_handles ? TRUE : FALSE, flags,
-                      environment_block ? environment_block->data() : nullptr,
-                      nullptr, startup, &process)) {
-    throw LauncherError(WindowsError("CreateProcessW", GetLastError()));
+struct ChildProcess {
+  UniqueHandle process;
+  UniqueHandle thread;
+};
+
+// Starts |executable|.  With |replace_environment| the child receives the
+// parent environment merged with |environment|; otherwise it inherits the
+// parent environment unchanged.  The merged block and every override value
+// may hold the session key, so both are wiped whether or not CreateProcessW
+// succeeds.
+ChildProcess LaunchProcess(const std::wstring& executable,
+                           const std::vector<std::wstring>& arguments,
+                           STARTUPINFOW* startup,
+                           bool inherit_handles,
+                           EnvironmentOverrides* environment,
+                           bool replace_environment) {
+  if (arguments.empty()) {
+    throw LauncherError("process argument vector may not be empty");
   }
-  return process;
+  auto command_line = MutableCommandLine(arguments);
+  std::vector<wchar_t> environment_block;
+  PROCESS_INFORMATION process{};
+  try {
+    if (replace_environment) {
+      environment_block = BuildEnvironmentBlock(*environment);
+    }
+    const DWORD flags = replace_environment ? CREATE_UNICODE_ENVIRONMENT : 0;
+    if (!CreateProcessW(executable.c_str(), command_line.data(), nullptr,
+                        nullptr, inherit_handles ? TRUE : FALSE, flags,
+                        replace_environment ? environment_block.data()
+                                            : nullptr,
+                        nullptr, startup, &process)) {
+      throw LauncherError(WindowsError("CreateProcessW", GetLastError()));
+    }
+  } catch (...) {
+    Wipe(&environment_block);
+    Wipe(environment);
+    throw;
+  }
+  Wipe(&environment_block);
+  Wipe(environment);
+  return {UniqueHandle(process.hProcess), UniqueHandle(process.hThread)};
+}
+
+// Resolves a user-supplied executable: bare names are searched like the
+// shell would, then the result must name an existing file.
+std::wstring ResolveExplicitExecutable(const std::wstring& path,
+                                       const char* option_name) {
+  std::wstring candidate = path;
+  if (candidate.find(L'\\') == std::wstring::npos &&
+      candidate.find(L'/') == std::wstring::npos) {
+    const std::wstring searched = SearchExecutable(candidate);
+    if (!searched.empty()) {
+      candidate = searched;
+    }
+  }
+  candidate = FullPath(candidate);
+  if (!IsRegularFile(candidate)) {
+    throw LauncherError(std::string(option_name) +
+                        " does not name an existing file: " +
+                        WideToUtf8(candidate));
+  }
+  return candidate;
 }
 
 }  // namespace
@@ -286,20 +331,7 @@ PROCESS_INFORMATION StartProcess(
 std::wstring FindOpenSsh(
     const std::optional<std::wstring>& explicit_path) {
   if (explicit_path) {
-    std::wstring candidate = *explicit_path;
-    if (candidate.find(L'\\') == std::wstring::npos &&
-        candidate.find(L'/') == std::wstring::npos) {
-      const std::wstring searched = SearchExecutable(candidate);
-      if (!searched.empty()) {
-        candidate = searched;
-      }
-    }
-    candidate = FullPath(candidate);
-    if (!IsRegularFile(candidate)) {
-      throw LauncherError("--ssh-path does not name an existing file: " +
-                          WideToUtf8(candidate));
-    }
-    return candidate;
+    return ResolveExplicitExecutable(*explicit_path, "--ssh-path");
   }
 
   const UINT needed = GetSystemDirectoryW(nullptr, 0);
@@ -358,20 +390,7 @@ std::wstring FindMoshClient(
   if (!explicit_path) {
     return FindSiblingMoshClient();
   }
-  std::wstring candidate = *explicit_path;
-  if (candidate.find(L'\\') == std::wstring::npos &&
-      candidate.find(L'/') == std::wstring::npos) {
-    const std::wstring searched = SearchExecutable(candidate);
-    if (!searched.empty()) {
-      candidate = searched;
-    }
-  }
-  candidate = FullPath(candidate);
-  if (!IsRegularFile(candidate)) {
-    throw LauncherError("--client does not name an existing file: " +
-                        WideToUtf8(candidate));
-  }
-  return candidate;
+  return ResolveExplicitExecutable(*explicit_path, "--client");
 }
 
 std::uint32_t RunProcessLines(
@@ -379,10 +398,6 @@ std::uint32_t RunProcessLines(
     const std::vector<std::wstring>& arguments,
     const OutputLineHandler& line_handler,
     EnvironmentOverrides environment) {
-  if (arguments.empty()) {
-    throw LauncherError("process argument vector may not be empty");
-  }
-
   SECURITY_ATTRIBUTES security{};
   security.nLength = sizeof(security);
   security.bInheritHandle = TRUE;
@@ -405,27 +420,11 @@ std::uint32_t RunProcessLines(
   startup.hStdOutput = write_pipe.get();
   startup.hStdError = write_pipe.get();
 
-  auto command_line = MutableCommandLine(arguments);
-  std::vector<wchar_t> environment_block;
-  std::vector<wchar_t>* environment_pointer = nullptr;
-  if (!environment.empty()) {
-    environment_block = BuildEnvironmentBlock(environment);
-    environment_pointer = &environment_block;
-  }
-
-  PROCESS_INFORMATION raw_process{};
-  try {
-    raw_process = StartProcess(executable, &command_line, &startup, true,
-                               environment_pointer);
-  } catch (...) {
-    Wipe(&environment_block);
-    Wipe(&environment);
-    throw;
-  }
-  Wipe(&environment_block);
-  Wipe(&environment);
-  UniqueHandle process(raw_process.hProcess);
-  UniqueHandle thread(raw_process.hThread);
+  const bool replace_environment = !environment.empty();
+  const ChildProcess child =
+      LaunchProcess(executable, arguments, &startup, true, &environment,
+                    replace_environment);
+  const HANDLE process = child.process.get();
   write_pipe.reset();
 
   std::exception_ptr callback_error;
@@ -439,8 +438,8 @@ std::uint32_t RunProcessLines(
       if (error == ERROR_BROKEN_PIPE) {
         break;
       }
-      TerminateProcess(process.get(), 255);
-      WaitForSingleObject(process.get(), INFINITE);
+      TerminateProcess(process, 255);
+      WaitForSingleObject(process, INFINITE);
       SecureZeroMemory(buffer.data(), buffer.size());
       SecureWipe(pending);
       throw LauncherError(WindowsError("ReadFile", error));
@@ -451,8 +450,8 @@ std::uint32_t RunProcessLines(
     pending.append(buffer.data(), read);
     SecureZeroMemory(buffer.data(), buffer.size());
     if (pending.size() > 1024 * 1024) {
-      TerminateProcess(process.get(), 255);
-      WaitForSingleObject(process.get(), INFINITE);
+      TerminateProcess(process, 255);
+      WaitForSingleObject(process, INFINITE);
       SecureWipe(pending);
       throw LauncherError("child process produced a line longer than 1 MiB");
     }
@@ -475,7 +474,7 @@ std::uint32_t RunProcessLines(
       SecureWipe(line);
     }
     if (callback_error) {
-      TerminateProcess(process.get(), 255);
+      TerminateProcess(process, 255);
       break;
     }
   }
@@ -488,12 +487,12 @@ std::uint32_t RunProcessLines(
       line_handler(pending);
     } catch (...) {
       callback_error = std::current_exception();
-      TerminateProcess(process.get(), 255);
+      TerminateProcess(process, 255);
     }
   }
   SecureWipe(pending);
   read_pipe.reset();
-  const std::uint32_t exit_code = WaitAndGetExitCode(process.get());
+  const std::uint32_t exit_code = WaitAndGetExitCode(process);
   if (callback_error) {
     std::rethrow_exception(callback_error);
   }
@@ -504,27 +503,11 @@ std::uint32_t RunInteractiveProcess(
     const std::wstring& executable,
     const std::vector<std::wstring>& arguments,
     EnvironmentOverrides environment) {
-  if (arguments.empty()) {
-    throw LauncherError("process argument vector may not be empty");
-  }
   STARTUPINFOW startup{};
   startup.cb = sizeof(startup);
-  auto command_line = MutableCommandLine(arguments);
-  auto environment_block = BuildEnvironmentBlock(environment);
-  PROCESS_INFORMATION raw_process{};
-  try {
-    raw_process = StartProcess(executable, &command_line, &startup, false,
-                               &environment_block);
-  } catch (...) {
-    Wipe(&environment_block);
-    Wipe(&environment);
-    throw;
-  }
-  Wipe(&environment_block);
-  Wipe(&environment);
-  UniqueHandle process(raw_process.hProcess);
-  UniqueHandle thread(raw_process.hThread);
-  return WaitAndGetExitCode(process.get());
+  const ChildProcess child = LaunchProcess(executable, arguments, &startup,
+                                           false, &environment, true);
+  return WaitAndGetExitCode(child.process.get());
 }
 
 std::wstring QueryConfiguredHostname(const Options& options,
@@ -617,20 +600,6 @@ std::wstring ResolveNumericAddress(const std::wstring& input,
                         std::to_string(name_status));
   }
   return numeric.data();
-}
-
-void SecureWipe(std::string& value) noexcept {
-  if (!value.empty()) {
-    SecureZeroMemory(value.data(), value.size());
-    value.clear();
-  }
-}
-
-void SecureWipe(std::wstring& value) noexcept {
-  if (!value.empty()) {
-    SecureZeroMemory(value.data(), value.size() * sizeof(wchar_t));
-    value.clear();
-  }
 }
 
 }  // namespace mosh::launcher

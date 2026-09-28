@@ -95,6 +95,12 @@ class BootstrapParser {
 
 std::optional<std::wstring> ParseSshConfigHostname(std::string_view line);
 
+// Zero the characters of a secret (the session key) and clear the string.
+// This cannot reach copies the allocator made earlier, so secrets should be
+// moved rather than copied.
+void SecureWipe(std::string& value) noexcept;
+void SecureWipe(std::wstring& value) noexcept;
+
 const char* UsageText();
 
 }  // namespace mosh::launcher

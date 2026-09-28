@@ -6,24 +6,21 @@
 #include <windows.h>
 
 #include <algorithm>
-#include <array>
 #include <cctype>
 #include <cwctype>
 #include <limits>
-#include <sstream>
 #include <utility>
 
 namespace mosh::launcher {
 namespace {
 
-bool StartsWith(std::wstring_view value, std::wstring_view prefix) {
-  return value.size() >= prefix.size() &&
-         value.substr(0, prefix.size()) == prefix;
-}
-
-bool StartsWith(std::string_view value, std::string_view prefix) {
-  return value.size() >= prefix.size() &&
-         value.substr(0, prefix.size()) == prefix;
+// Works for narrow and wide strings, views and literals alike.
+template <typename Text, typename Prefix>
+bool StartsWith(const Text& value, const Prefix& prefix) {
+  using View = std::basic_string_view<typename Text::value_type>;
+  const View text(value);
+  const View head(prefix);
+  return text.size() >= head.size() && text.substr(0, head.size()) == head;
 }
 
 std::wstring Lower(std::wstring value) {
@@ -33,19 +30,8 @@ std::wstring Lower(std::wstring value) {
   return value;
 }
 
-void RejectEmbeddedControl(const std::wstring& value,
-                           const char* option_name) {
-  if (value.empty()) {
-    throw LauncherError(std::string(option_name) + " may not be empty");
-  }
-  if (std::find_if(value.begin(), value.end(), [](wchar_t c) {
-        return c == L'\0' || c == L'\r' || c == L'\n';
-      }) != value.end()) {
-    throw LauncherError(std::string(option_name) +
-                        " contains a forbidden control character");
-  }
-}
-
+// NUL would truncate the Win32 command line; CR/LF would let an argument
+// smuggle extra lines into the remote shell or the bootstrap protocol.
 void RejectControlCharacters(const std::wstring& value,
                              const char* description) {
   if (std::find_if(value.begin(), value.end(), [](wchar_t c) {
@@ -54,6 +40,15 @@ void RejectControlCharacters(const std::wstring& value,
     throw LauncherError(std::string(description) +
                         " contains a forbidden control character");
   }
+}
+
+// Option values must also be non-empty.
+void RejectEmbeddedControl(const std::wstring& value,
+                           const char* option_name) {
+  if (value.empty()) {
+    throw LauncherError(std::string(option_name) + " may not be empty");
+  }
+  RejectControlCharacters(value, option_name);
 }
 
 std::wstring RequireNext(const std::vector<std::wstring>& arguments,
@@ -83,34 +78,17 @@ std::optional<std::wstring> LongOptionValue(
   return std::nullopt;
 }
 
-std::uint32_t ParseDecimal(std::wstring_view value,
+// Strict unsigned decimal parser for narrow or wide text: no sign, no
+// whitespace, no leading "+", and overflow-checked against |maximum|.
+template <typename Text>
+std::uint32_t ParseDecimal(const Text& value,
                            std::uint32_t maximum,
                            const char* description) {
   if (value.empty()) {
     throw LauncherError(std::string(description) + " is empty");
   }
   std::uint32_t result = 0;
-  for (wchar_t c : value) {
-    if (c < L'0' || c > L'9') {
-      throw LauncherError(std::string(description) + " is not numeric");
-    }
-    const std::uint32_t digit = static_cast<std::uint32_t>(c - L'0');
-    if (result > (maximum - digit) / 10) {
-      throw LauncherError(std::string(description) + " is out of range");
-    }
-    result = result * 10 + digit;
-  }
-  return result;
-}
-
-std::uint32_t ParseDecimal(std::string_view value,
-                           std::uint32_t maximum,
-                           const char* description) {
-  if (value.empty()) {
-    throw LauncherError(std::string(description) + " is empty");
-  }
-  std::uint32_t result = 0;
-  for (char c : value) {
+  for (const auto c : value) {
     if (c < '0' || c > '9') {
       throw LauncherError(std::string(description) + " is not numeric");
     }
@@ -629,17 +607,9 @@ bool BootstrapParser::ConsumeLine(std::string_view input) {
   return false;
 }
 
-BootstrapParser::~BootstrapParser() {
-  if (!key_.empty()) {
-    SecureZeroMemory(key_.data(), key_.size());
-  }
-}
+BootstrapParser::~BootstrapParser() { SecureWipe(key_); }
 
-BootstrapResult::~BootstrapResult() {
-  if (!key.empty()) {
-    SecureZeroMemory(key.data(), key.size());
-  }
-}
+BootstrapResult::~BootstrapResult() { SecureWipe(key); }
 
 BootstrapResult::BootstrapResult(BootstrapResult&& other) noexcept
     : port(other.port),
@@ -647,26 +617,18 @@ BootstrapResult::BootstrapResult(BootstrapResult&& other) noexcept
       ssh_server_address(std::move(other.ssh_server_address)),
       announced_address(std::move(other.announced_address)) {
   other.port = 0;
-  if (!other.key.empty()) {
-    SecureZeroMemory(other.key.data(), other.key.size());
-    other.key.clear();
-  }
+  SecureWipe(other.key);
 }
 
 BootstrapResult& BootstrapResult::operator=(BootstrapResult&& other) noexcept {
   if (this != &other) {
-    if (!key.empty()) {
-      SecureZeroMemory(key.data(), key.size());
-    }
+    SecureWipe(key);
     port = other.port;
     key = std::move(other.key);
     ssh_server_address = std::move(other.ssh_server_address);
     announced_address = std::move(other.announced_address);
     other.port = 0;
-    if (!other.key.empty()) {
-      SecureZeroMemory(other.key.data(), other.key.size());
-      other.key.clear();
-    }
+    SecureWipe(other.key);
   }
   return *this;
 }
@@ -701,6 +663,20 @@ std::optional<std::wstring> ParseSshConfigHostname(std::string_view input) {
   }
   ValidateAddressToken(words[1], "OpenSSH HostName");
   return Utf8ToWide(words[1]);
+}
+
+void SecureWipe(std::string& value) noexcept {
+  if (!value.empty()) {
+    SecureZeroMemory(value.data(), value.size());
+    value.clear();
+  }
+}
+
+void SecureWipe(std::wstring& value) noexcept {
+  if (!value.empty()) {
+    SecureZeroMemory(value.data(), value.size() * sizeof(wchar_t));
+    value.clear();
+  }
 }
 
 const char* UsageText() {
