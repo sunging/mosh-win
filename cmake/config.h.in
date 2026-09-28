@@ -1,8 +1,8 @@
 #pragma once
 
 #define PACKAGE_NAME "mosh"
-#define PACKAGE_VERSION "1.4.0"
-#define PACKAGE_STRING "mosh 1.4.0-win1"
+#define PACKAGE_VERSION "@MOSH_UPSTREAM_VERSION@"
+#define PACKAGE_STRING "mosh @MOSH_WIN_VERSION@"
 #define BUILD_VERSION "windows-native"
 
 #define HAVE_MEMORY 1

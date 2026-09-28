@@ -18,7 +18,7 @@
 namespace {
 
 void print_version(FILE *stream) {
-  std::fputs("mosh-client (mosh 1.4.0-win1)\n"
+  std::fputs("mosh-client (mosh " MOSH_WIN_VERSION ")\n"
              "Copyright 2012 Keith Winstein and contributors\n"
              "License GPLv3+: GNU GPL version 3 or later.\n",
              stream);

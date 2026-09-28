@@ -40,12 +40,8 @@ function(_mosh_normalize_dependency_source target source_dir stable_dir)
   if(NOT TARGET "${target}")
     return()
   endif()
-  file(TO_NATIVE_PATH "${source_dir}" _source_dir_native)
-  target_compile_options("${target}" PRIVATE
-    "-ffile-prefix-map=${source_dir}=${stable_dir}"
-    "-fdebug-prefix-map=${source_dir}=${stable_dir}"
-    "-ffile-prefix-map=${_source_dir_native}=${stable_dir}"
-    "-fdebug-prefix-map=${_source_dir_native}=${stable_dir}")
+  mosh_prefix_map_flags(_flags "${source_dir}" "${stable_dir}")
+  target_compile_options("${target}" PRIVATE ${_flags})
 endfunction()
 
 foreach(_protobuf_target IN ITEMS

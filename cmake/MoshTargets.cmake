@@ -8,12 +8,8 @@ set(MOSH_GENERATED_INCLUDE_DIR "${MOSH_GENERATED_ROOT}/include")
 # not only by mosh-core.  Apply this after the checkout-wide prefix map so the
 # more specific upstream path wins for every native target, including builds
 # from a corresponding-source directory outside the checkout.
-file(TO_NATIVE_PATH "${MOSH_UPSTREAM_ROOT}" _mosh_upstream_root_native)
-target_compile_options(mosh-project-options INTERFACE
-  "-ffile-prefix-map=${MOSH_UPSTREAM_ROOT}=third_party/mosh"
-  "-fdebug-prefix-map=${MOSH_UPSTREAM_ROOT}=third_party/mosh"
-  "-ffile-prefix-map=${_mosh_upstream_root_native}=third_party/mosh"
-  "-fdebug-prefix-map=${_mosh_upstream_root_native}=third_party/mosh")
+mosh_prefix_map_flags(_mosh_upstream_map "${MOSH_UPSTREAM_ROOT}" "third_party/mosh")
+target_compile_options(mosh-project-options INTERFACE ${_mosh_upstream_map})
 
 file(MAKE_DIRECTORY "${MOSH_GENERATED_INCLUDE_DIR}")
 configure_file("${PROJECT_SOURCE_DIR}/cmake/config.h.in"
@@ -111,9 +107,6 @@ if(_core_sources_ready AND TARGET mosh-win32-platform)
   target_link_libraries(mosh-core
     PUBLIC mosh-project-options mosh-win32-platform mosh-protos ZLIB::ZLIB)
   target_compile_definitions(mosh-core PRIVATE USE_BCRYPT_AES=1)
-  target_compile_options(mosh-core PRIVATE
-    "-ffile-prefix-map=${MOSH_UPSTREAM_ROOT}=third_party/mosh"
-    "-fdebug-prefix-map=${MOSH_UPSTREAM_ROOT}=third_party/mosh")
   target_include_directories(mosh-core PUBLIC
     "${MOSH_GENERATED_INCLUDE_DIR}"
     "${MOSH_GENERATED_PROTO_DIR}"

@@ -6,6 +6,13 @@ project(mosh-win
   HOMEPAGE_URL "https://mosh.org/"
   LANGUAGES C CXX)
 
+# Single source of truth for version strings.  The project version tracks the
+# upstream Mosh release; the revision counts Windows-port releases on top of
+# it.  Scripts read these two lines, so keep them literal.
+set(MOSH_UPSTREAM_VERSION "${PROJECT_VERSION}")
+set(MOSH_WIN_PACKAGE_REVISION "win1")
+set(MOSH_WIN_VERSION "${MOSH_UPSTREAM_VERSION}-${MOSH_WIN_PACKAGE_REVISION}")
+
 if(NOT WIN32 OR NOT MINGW)
   message(FATAL_ERROR "mosh-win supports the MinGW-w64/UCRT Windows toolchain only")
 endif()
@@ -63,26 +70,19 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
 
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+include(ProjectOptions)
+
 # Keep diagnostics, assertion strings, and debug metadata independent of the
 # absolute checkout/build directory.  These options must be directory-wide:
 # FetchContent dependencies such as protobuf contain __FILE__ strings too and
-# do not link against mosh-project-options.
-file(TO_NATIVE_PATH "${PROJECT_SOURCE_DIR}" _mosh_source_dir_native)
-file(TO_NATIVE_PATH "${CMAKE_BINARY_DIR}" _mosh_binary_dir_native)
-add_compile_options(
-  "-ffile-prefix-map=${PROJECT_SOURCE_DIR}=."
-  "-fdebug-prefix-map=${PROJECT_SOURCE_DIR}=."
-  "-ffile-prefix-map=${_mosh_source_dir_native}=."
-  "-fdebug-prefix-map=${_mosh_source_dir_native}=."
-  # GCC applies the last matching prefix map, so the more-specific build
-  # directory mapping must follow the checkout-wide mapping above.
-  "-ffile-prefix-map=${CMAKE_BINARY_DIR}=build"
-  "-fdebug-prefix-map=${CMAKE_BINARY_DIR}=build"
-  "-ffile-prefix-map=${_mosh_binary_dir_native}=build"
-  "-fdebug-prefix-map=${_mosh_binary_dir_native}=build")
+# do not link against mosh-project-options.  GCC applies the last matching
+# prefix map, so the more-specific build directory mapping must follow the
+# checkout-wide mapping.
+mosh_prefix_map_flags(_mosh_source_map "${PROJECT_SOURCE_DIR}" ".")
+mosh_prefix_map_flags(_mosh_binary_map "${CMAKE_BINARY_DIR}" "build")
+add_compile_options(${_mosh_source_map} ${_mosh_binary_map})
 
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
-include(ProjectOptions)
 include(Dependencies)
 include(MoshTargets)
 
@@ -106,7 +106,7 @@ install(FILES README.md LICENSE THIRD_PARTY_NOTICES.md
   DESTINATION "${CMAKE_INSTALL_DOCDIR}")
 
 set(CPACK_PACKAGE_NAME "mosh-win")
-set(CPACK_PACKAGE_VERSION "1.4.0-win1")
+set(CPACK_PACKAGE_VERSION "${MOSH_WIN_VERSION}")
 set(CPACK_GENERATOR "ZIP")
 set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
 include(CPack)

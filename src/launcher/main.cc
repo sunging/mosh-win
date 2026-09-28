@@ -61,7 +61,7 @@ int Run(const std::vector<std::wstring>& arguments) {
     return 0;
   }
   if (options.show_version) {
-    std::fputs("mosh 1.4.0-win1\n", stdout);
+    std::fputs("mosh " MOSH_WIN_VERSION "\n", stdout);
     return 0;
   }
 
