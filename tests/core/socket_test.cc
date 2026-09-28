@@ -1,4 +1,5 @@
 #include "platform/utf8.h"
+#include "test_support.h"
 #include "platform/win32_socket.h"
 
 #include <algorithm>
@@ -10,12 +11,7 @@
 
 namespace {
 
-void expect(bool condition, const char *message) {
-  if (!condition) {
-    std::cerr << "socket_test: " << message << '\n';
-    std::exit(1);
-  }
-}
+using mosh::test::expect;
 
 void ipv4_event_test() {
   using namespace mosh::win32;

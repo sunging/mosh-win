@@ -1,19 +1,11 @@
 #include "platform/win32_console.h"
+#include "test_support.h"
 
 #include <cstdlib>
 #include <iostream>
 #include <string>
 
-namespace {
-
-void expect(bool condition, const char *message) {
-  if (!condition) {
-    std::cerr << "console_test: " << message << '\n';
-    std::exit(1);
-  }
-}
-
-} // namespace
+using mosh::test::expect;
 
 int main() {
   HANDLE read_pipe = nullptr;

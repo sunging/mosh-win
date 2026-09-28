@@ -1,4 +1,5 @@
 #include "ae.h"
+#include "test_support.h"
 #include "crypto.h"
 #include "platform/win32_crypto.h"
 
@@ -16,12 +17,7 @@
 
 namespace {
 
-void expect(bool condition, const char *message) {
-  if (!condition) {
-    std::cerr << "crypto_test: " << message << '\n';
-    std::exit(1);
-  }
-}
+using mosh::test::expect;
 
 void expect_invalid_base64_key(const std::string &value,
                                const char *message) {

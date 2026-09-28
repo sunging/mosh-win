@@ -1,4 +1,5 @@
 #include "compressor.h"
+#include "test_support.h"
 #include "user.h"
 #include "userinput.pb.h"
 
@@ -8,12 +9,7 @@
 
 namespace {
 
-void expect(bool condition, const char *message) {
-  if (!condition) {
-    std::cerr << "state_sync_test: " << message << '\n';
-    std::exit(1);
-  }
-}
+using mosh::test::expect;
 
 void test_protobuf_round_trip() {
   ClientBuffers::UserMessage message;

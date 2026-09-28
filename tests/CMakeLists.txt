@@ -64,6 +64,16 @@ if(TARGET mosh-launcher)
     TIMEOUT 20)
 endif()
 
+# Core tests include test_support.h, which reports failures under the test's
+# name, and headers from src/ (for example "platform/utf8.h").
+function(_mosh_use_test_support target test_name)
+  target_include_directories("${target}" PRIVATE
+    "${PROJECT_SOURCE_DIR}/src"
+    "${CMAKE_CURRENT_SOURCE_DIR}")
+  target_compile_definitions("${target}" PRIVATE
+    "MOSH_TEST_NAME=\"${test_name}\"")
+endfunction()
+
 # These sources are added by the core port in independently runnable pieces.
 # Keep the mapping explicit because the tests intentionally have different
 # dependency surfaces (for example UTF-8 must not accidentally require the
@@ -76,8 +86,7 @@ function(_mosh_add_core_test test_stem timeout)
 
   set(_target "mosh-${test_stem}")
   add_executable("${_target}" "${_source}")
-  target_include_directories("${_target}" PRIVATE
-    "${PROJECT_SOURCE_DIR}/src")
+  _mosh_use_test_support("${_target}" "${test_stem}")
   target_link_libraries("${_target}" PRIVATE ${ARGN})
   mosh_win_apply_executable_defaults("${_target}")
 
@@ -103,8 +112,7 @@ if(TARGET mosh-core)
   add_executable(mosh-network-resilience-test
     core/network_resilience_test.cc
     "${PROJECT_SOURCE_DIR}/src/platform/mosh_network_win32.cc")
-  target_include_directories(mosh-network-resilience-test PRIVATE
-    "${PROJECT_SOURCE_DIR}/src")
+  _mosh_use_test_support(mosh-network-resilience-test network_resilience_test)
   target_link_libraries(mosh-network-resilience-test PRIVATE
     mosh-core mosh-win32-platform)
   mosh_win_apply_executable_defaults(mosh-network-resilience-test)

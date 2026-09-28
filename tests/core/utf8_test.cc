@@ -1,19 +1,11 @@
 #include "platform/utf8.h"
+#include "test_support.h"
 
 #include <cstdlib>
 #include <iostream>
 #include <string>
 
-namespace {
-
-void expect(bool condition, const char *message) {
-  if (!condition) {
-    std::cerr << "utf8_test: " << message << '\n';
-    std::exit(1);
-  }
-}
-
-} // namespace
+using mosh::test::expect;
 
 int main() {
   using mosh::win32::utf8::decode;

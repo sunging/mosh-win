@@ -1,4 +1,5 @@
 #include "completeterminal.h"
+#include "test_support.h"
 #include "hostinput.pb.h"
 #include "parseraction.h"
 #include "terminaldisplay.h"
@@ -9,12 +10,7 @@
 
 namespace {
 
-void expect(bool condition, const char *message) {
-  if (!condition) {
-    std::cerr << "terminal_test: " << message << '\n';
-    std::exit(1);
-  }
-}
+using mosh::test::expect;
 
 std::string cell_text(const Terminal::Framebuffer &framebuffer, int row,
                       int column) {

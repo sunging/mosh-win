@@ -1,5 +1,6 @@
 /* GPL-3.0-or-later */
 #include "platform/mosh_network_win32.h"
+#include "test_support.h"
 
 #include "fatal_assert.h"
 #include "networktransport-impl.h"
@@ -18,12 +19,7 @@ namespace {
 
 std::uint64_t test_clock_ms = 100000;
 
-void expect(bool condition, const char *message) {
-  if (!condition) {
-    std::cerr << "network_resilience_test: " << message << '\n';
-    std::exit(1);
-  }
-}
+using mosh::test::expect;
 
 void make_nonblocking(SOCKET socket) {
   u_long enabled = 1;
