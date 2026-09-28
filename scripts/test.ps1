@@ -1,3 +1,8 @@
+<#
+.SYNOPSIS
+Runs CTest for a configured preset and audits the shipped executables' PE
+imports.
+#>
 [CmdletBinding()]
 param(
     [ValidateSet('Debug', 'Release')]
@@ -7,24 +12,20 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-$root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
-$preset = if ($Configuration -eq 'Release') { 'mingw64-release' } else { 'mingw64-dev' }
+Import-Module (Join-Path $PSScriptRoot 'MoshWin.psm1') -Force
+
+$root = Get-MoshWinRoot
+$preset = Get-MoshWinPreset $Configuration
 $binDir = Join-Path $root "out/build/$preset/bin"
 
 Push-Location $root
 try {
-    & ctest --preset $preset
-    if ($LASTEXITCODE -ne 0) {
-        throw "CTest failed with code $LASTEXITCODE"
-    }
+    Invoke-Native 'ctest' @('--preset', $preset)
 
     if (-not $SkipImportAudit) {
         & (Join-Path $PSScriptRoot 'audit-pe-imports.ps1') -Binary @(
             (Join-Path $binDir 'mosh.exe'),
             (Join-Path $binDir 'mosh-client.exe'))
-        if ($LASTEXITCODE -ne 0) {
-            throw "PE import audit failed with code $LASTEXITCODE"
-        }
     }
 } finally {
     Pop-Location

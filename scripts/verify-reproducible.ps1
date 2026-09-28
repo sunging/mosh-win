@@ -1,3 +1,11 @@
+<#
+.SYNOPSIS
+Builds the release twice in two clean directories and checks that mosh.exe
+and mosh-client.exe are bit-identical.
+
+.PARAMETER DependencySourceRoot
+Build offline from these dependency trees instead of downloading them.
+#>
 [CmdletBinding()]
 param(
     [string]$DependencySourceRoot
@@ -5,8 +13,10 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-$root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
-$primary = Join-Path $root 'out/build/mingw64-release'
+Import-Module (Join-Path $PSScriptRoot 'MoshWin.psm1') -Force
+
+$root = Get-MoshWinRoot
+$primary = Join-Path $root "out/build/$(Get-MoshWinPreset Release)"
 $secondary = Join-Path $root 'out/build/mingw64-repro'
 
 $common = @{
@@ -14,7 +24,7 @@ $common = @{
     Clean = $true
 }
 if ($DependencySourceRoot) {
-    $common.DependencySourceRoot = [IO.Path]::GetFullPath($DependencySourceRoot)
+    $common.DependencySourceRoot = Resolve-MoshWinPath $DependencySourceRoot
     $common.Offline = $true
 }
 
@@ -23,10 +33,8 @@ if ($DependencySourceRoot) {
 
 $mismatch = $false
 $results = foreach ($name in @('mosh.exe', 'mosh-client.exe')) {
-    $primaryPath = Join-Path $primary "bin/$name"
-    $secondaryPath = Join-Path $secondary "bin/$name"
-    $primaryHash = (Get-FileHash -LiteralPath $primaryPath -Algorithm SHA256).Hash.ToLowerInvariant()
-    $secondaryHash = (Get-FileHash -LiteralPath $secondaryPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    $primaryHash = Get-Sha256 (Join-Path $primary "bin/$name")
+    $secondaryHash = Get-Sha256 (Join-Path $secondary "bin/$name")
     $match = $primaryHash -ceq $secondaryHash
     if (-not $match) { $mismatch = $true }
 

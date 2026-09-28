@@ -1,34 +1,53 @@
+<#
+.SYNOPSIS
+Writes the GPL corresponding-source package: this project plus the exact
+Mosh, protobuf and zlib source trees used by the release build.
+
+.PARAMETER BuildDir
+Release build directory whose _deps/<name>-src trees are bundled.
+
+.PARAMETER DependencySourceRoot
+Bundle these dependency trees instead (for builds configured with
+-DependencySourceRoot).
+#>
 [CmdletBinding()]
 param(
-    [string]$Version = '1.4.0-win1',
+    [string]$Version,
     [string]$BuildDir,
     [string]$DependencySourceRoot
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-$root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
-if (-not $BuildDir) { $BuildDir = Join-Path $root 'out/build/mingw64-release' }
+Import-Module (Join-Path $PSScriptRoot 'MoshWin.psm1') -Force
+
+if (-not $Version) { $Version = Get-MoshWinVersion }
+$root = Get-MoshWinRoot
+$BuildDir = if ($BuildDir) {
+    Resolve-MoshWinPath $BuildDir
+} else {
+    Join-Path $root "out/build/$(Get-MoshWinPreset Release)"
+}
 if ($DependencySourceRoot) {
-    $DependencySourceRoot = [IO.Path]::GetFullPath($DependencySourceRoot)
+    $DependencySourceRoot = Resolve-MoshWinPath $DependencySourceRoot
 }
 $distDir = Join-Path $root 'dist'
 $stageDir = Join-Path $distDir "mosh-win-$Version-source"
 $archive = "$stageDir.zip"
 
-if (Test-Path -LiteralPath $stageDir) { Remove-Item -LiteralPath $stageDir -Recurse -Force }
+Reset-Directory $stageDir
 if (Test-Path -LiteralPath $archive) { Remove-Item -LiteralPath $archive -Force }
-New-Item -ItemType Directory -Path $stageDir -Force | Out-Null
 
 Push-Location $root
 try {
-    & robocopy $root (Join-Path $stageDir 'mosh-win') /E /XD .git out dist build .agents .cache .codex .vscode .idea /XF '*.user' CMakeUserPresets.json | Out-Host
-    $copyResult = $LASTEXITCODE
-    if ($copyResult -ge 8) { throw "robocopy failed with code $copyResult" }
+    # Local tool state, build output and per-user CMake presets never ship.
+    Invoke-Robocopy $root (Join-Path $stageDir 'mosh-win') @(
+        '/XD', '.git', 'out', 'dist', 'build', '.agents', '.cache', '.codex', '.vscode', '.idea',
+        '/XF', '*.user', 'CMakeUserPresets.json')
 
     $thirdPartyDir = Join-Path $stageDir 'third_party/source'
     New-Item -ItemType Directory -Path $thirdPartyDir -Force | Out-Null
-    foreach ($dependency in @('mosh_upstream', 'protobuf', 'zlib')) {
+    foreach ($dependency in Get-MoshWinDependencyNames) {
         $source = if ($DependencySourceRoot) {
             Join-Path $DependencySourceRoot $dependency
         } else {
@@ -37,22 +56,12 @@ try {
         if (-not (Test-Path -LiteralPath $source -PathType Container)) {
             throw "Corresponding dependency source is missing: $source. Configure the release preset first or pass -DependencySourceRoot."
         }
-        & robocopy $source (Join-Path $thirdPartyDir $dependency) /E | Out-Host
-        $copyResult = $LASTEXITCODE
-        if ($copyResult -ge 8) { throw "robocopy failed with code $copyResult" }
+        Invoke-Robocopy $source (Join-Path $thirdPartyDir $dependency)
     }
 
-    $stagePrefix = $stageDir.TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
-    Get-ChildItem -LiteralPath $stageDir -File -Recurse | Sort-Object FullName | ForEach-Object {
-        $hash = Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName
-        $relative = $_.FullName.Substring($stagePrefix.Length).Replace('\', '/')
-        "$($hash.Hash.ToLowerInvariant())  $relative"
-    } | Set-Content -LiteralPath (Join-Path $stageDir 'SHA256SUMS.txt') -Encoding ascii
-
+    Write-Sha256Manifest -Directory $stageDir -Output (Join-Path $stageDir 'SHA256SUMS.txt')
     Compress-Archive -LiteralPath $stageDir -DestinationPath $archive -CompressionLevel Optimal
     Write-Host "Corresponding-source package: $archive"
 } finally {
     Pop-Location
 }
-
-exit 0

@@ -1,24 +1,28 @@
+<#
+.SYNOPSIS
+Checks that PE executables import only reviewed Windows system DLLs.
+
+.DESCRIPTION
+Fails if a binary imports a POSIX emulation layer, the legacy MSVCRT, a
+MinGW runtime DLL or a third-party library that must be linked statically,
+or (unless -AllowUnknownSystemDll) any DLL outside the reviewed list.
+All problems are reported before the script fails.
+#>
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)]
     [string[]]$Binary,
+    # Defaults to bin/objdump.exe of the toolchain found by Get-MingwRoot.
     [string]$Objdump,
     [switch]$AllowUnknownSystemDll
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+Import-Module (Join-Path $PSScriptRoot 'MoshWin.psm1') -Force
+
 if (-not $Objdump) {
-    if ($env:MINGW64_ROOT) {
-        $Objdump = Join-Path $env:MINGW64_ROOT 'bin/objdump.exe'
-    } else {
-        $found = Get-Command objdump.exe -CommandType Application -ErrorAction SilentlyContinue |
-            Select-Object -First 1
-        if (-not $found) {
-            throw 'objdump.exe not found; pass -Objdump, set MINGW64_ROOT, or put the MinGW-w64 bin directory on PATH.'
-        }
-        $Objdump = $found.Source
-    }
+    $Objdump = Join-Path (Get-MingwRoot) 'bin/objdump.exe'
 }
 if (-not (Test-Path -LiteralPath $Objdump -PathType Leaf)) {
     throw "objdump was not found: $Objdump"
@@ -81,7 +85,6 @@ if ($problems.Count -ne 0) {
     foreach ($problem in $problems) {
         [Console]::Error.WriteLine("error: $problem")
     }
-    [Console]::Error.WriteLine("PE import audit failed with $($problems.Count) problem(s).")
-    exit 1
+    throw "PE import audit failed with $($problems.Count) problem(s)."
 }
 Write-Host 'PE import audit passed.'
