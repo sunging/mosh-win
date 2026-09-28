@@ -63,5 +63,24 @@ int main() {
   streaming.finish(streamed);
   expect(streamed == std::u32string(1, replacement_character),
          "truncated sequence must finish as one replacement");
+
+  /* A lead byte followed by a non-continuation byte is invalid as soon as
+     both bytes are known; the ASCII byte must not wait for more input. */
+  streaming.reset();
+  streamed.clear();
+  streaming.feed("\xE2" "A", streamed);
+  expect(streamed == U"�A" && !streaming.has_pending_input(),
+         "broken sequence must be replaced without further input");
+
+  /* Streaming and one-shot decoding must agree byte-for-byte. */
+  const std::string mixed = "a\xE2\x82" "b\xF0\x9F\x98\x80\xC3" "c\xED\xA0\x80";
+  std::u32string incremental;
+  streaming.reset();
+  for (const char byte : mixed) {
+    streaming.feed(std::string_view(&byte, 1), incremental);
+  }
+  streaming.finish(incremental);
+  expect(incremental == decode(mixed),
+         "byte-at-a-time decoding differs from one-shot decoding");
   return 0;
 }

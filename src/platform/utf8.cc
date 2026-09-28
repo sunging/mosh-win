@@ -107,16 +107,13 @@ void Decoder::decode_available(std::u32string &output, bool finish) {
       continue;
     }
 
-    if (pending_.size() - offset < length) {
-      if (finish) {
-        output.push_back(replacement_character);
-        offset = pending_.size();
-      }
-      break;
-    }
-
+    /* Validate the continuation bytes that are already available, so a
+       sequence that is provably broken (for example "\xE2" followed by
+       ASCII) is replaced immediately instead of waiting for more input.
+       The result is identical to decoding the complete byte string. */
+    const std::size_t available = std::min(length, pending_.size() - offset);
     bool valid = true;
-    for (std::size_t index = 1; index < length; ++index) {
+    for (std::size_t index = 1; index < available; ++index) {
       const std::uint8_t byte = pending_[offset + index];
       if (!continuation(byte)) {
         valid = false;
@@ -124,8 +121,21 @@ void Decoder::decode_available(std::u32string &output, bool finish) {
       }
       value = (value << 6U) | (byte & 0x3FU);
     }
+    if (!valid) {
+      output.push_back(replacement_character);
+      ++offset;
+      continue;
+    }
 
-    if (!valid || value < minimum || value > 0x10FFFFU ||
+    if (available < length) {
+      if (finish) {
+        output.push_back(replacement_character);
+        offset = pending_.size();
+      }
+      break;
+    }
+
+    if (value < minimum || value > 0x10FFFFU ||
         (value >= 0xD800U && value <= 0xDFFFU)) {
       output.push_back(replacement_character);
       ++offset;

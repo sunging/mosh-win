@@ -6,6 +6,7 @@
 
 #include "win32_crypto.h"
 
+#include <algorithm>
 #include <limits>
 #include <sstream>
 
@@ -26,13 +27,6 @@ void check_status(const char *operation, NTSTATUS status) {
   }
 }
 
-[[nodiscard]] ULONG checked_ulong(std::size_t value, const char *operation) {
-  if (value > std::numeric_limits<ULONG>::max()) {
-    throw std::length_error(std::string(operation) + ": input is too large");
-  }
-  return static_cast<ULONG>(value);
-}
-
 } // namespace
 
 CryptoError::CryptoError(const char *operation, NTSTATUS status)
@@ -47,8 +41,10 @@ void secure_random(void *destination, std::size_t size) {
   }
 
   auto *output = static_cast<PUCHAR>(destination);
+  /* BCryptGenRandom takes a ULONG length; split larger requests. */
   while (size != 0) {
-    const ULONG chunk = checked_ulong(size, "BCryptGenRandom");
+    const ULONG chunk = static_cast<ULONG>(std::min<std::size_t>(
+        size, std::numeric_limits<ULONG>::max()));
     check_status("BCryptGenRandom",
                  BCryptGenRandom(nullptr, output, chunk,
                                  BCRYPT_USE_SYSTEM_PREFERRED_RNG));

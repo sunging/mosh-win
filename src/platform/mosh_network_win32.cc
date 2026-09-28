@@ -7,8 +7,9 @@
 #include "timestamp.h"
 
 #include <algorithm>
+#include <cassert>
 #include <cerrno>
-#include <cstdio>
+#include <cmath>
 #include <cstring>
 #include <limits>
 
