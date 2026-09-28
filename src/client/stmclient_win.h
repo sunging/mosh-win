@@ -16,6 +16,12 @@
 #include <memory>
 #include <string>
 
+/*
+ * Windows counterpart of upstream STMClient.  It owns the raw VT console
+ * session, the console input thread, the Ctrl/close signal event and the
+ * Mosh transport, and multiplexes them in a single-threaded event loop.
+ * The session key is erased as soon as the transport has been created.
+ */
 class STMClientWin final {
 public:
   STMClientWin(const char *ip, const char *port, const char *key,
@@ -26,8 +32,11 @@ public:
   STMClientWin(const STMClientWin &) = delete;
   STMClientWin &operator=(const STMClientWin &) = delete;
 
+  /* Opens the alternate screen and creates the UDP transport. */
   void init();
+  /* Restores the terminal and reports an unclean exit; idempotent. */
   void shutdown() noexcept;
+  /* Runs until the session ends; returns true for a clean shutdown. */
   bool main_loop();
 
 private:
@@ -42,6 +51,16 @@ private:
   void output_new_frame();
   void request_shutdown(const std::u32string &message);
   [[nodiscard]] bool still_connecting() const;
+
+  /* Event-loop steps, in the order main_loop() runs them.  The bool
+     handlers return false when the loop must stop immediately. */
+  [[nodiscard]] DWORD next_wait_ms();
+  void drain_network();
+  [[nodiscard]] bool handle_console_input();
+  [[nodiscard]] bool handle_console_signal();
+  [[nodiscard]] bool shutdown_finished();
+  void update_connecting_notification();
+  void publish_send_error();
 
   std::string ip_;
   std::string port_;

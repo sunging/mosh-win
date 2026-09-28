@@ -20,6 +20,24 @@ std::u32string ascii_widen(const std::string &text) {
   return std::u32string(text.begin(), text.end());
 }
 
+/* Maps MOSH_PREDICTION_DISPLAY to the upstream prediction preference. */
+Overlay::PredictionEngine::DisplayPreference
+parse_prediction_mode(const char *mode) {
+  if (std::strcmp(mode, "always") == 0) {
+    return Overlay::PredictionEngine::Always;
+  }
+  if (std::strcmp(mode, "never") == 0) {
+    return Overlay::PredictionEngine::Never;
+  }
+  if (std::strcmp(mode, "adaptive") == 0) {
+    return Overlay::PredictionEngine::Adaptive;
+  }
+  if (std::strcmp(mode, "experimental") == 0) {
+    return Overlay::PredictionEngine::Experimental;
+  }
+  throw std::invalid_argument(std::string("Unknown prediction mode: ") + mode);
+}
+
 } // namespace
 
 STMClientWin::STMClientWin(const char *ip, const char *port, const char *key,
@@ -30,19 +48,8 @@ STMClientWin::STMClientWin(const char *ip, const char *port, const char *key,
       key_(key != nullptr ? key : ""), console_(),
       input_(console_.input_handle()), signal_(), verbose_(verbose) {
   if (prediction_mode != nullptr) {
-    auto &engine = overlays_.get_prediction_engine();
-    if (std::strcmp(prediction_mode, "always") == 0) {
-      engine.set_display_preference(Overlay::PredictionEngine::Always);
-    } else if (std::strcmp(prediction_mode, "never") == 0) {
-      engine.set_display_preference(Overlay::PredictionEngine::Never);
-    } else if (std::strcmp(prediction_mode, "adaptive") == 0) {
-      engine.set_display_preference(Overlay::PredictionEngine::Adaptive);
-    } else if (std::strcmp(prediction_mode, "experimental") == 0) {
-      engine.set_display_preference(Overlay::PredictionEngine::Experimental);
-    } else {
-      throw std::invalid_argument(std::string("Unknown prediction mode: ") +
-                                  prediction_mode);
-    }
+    overlays_.get_prediction_engine().set_display_preference(
+        parse_prediction_mode(prediction_mode));
   }
   if (prediction_overwrite != nullptr &&
       std::strcmp(prediction_overwrite, "yes") == 0) {
@@ -293,6 +300,98 @@ void STMClientWin::request_shutdown(const std::u32string &message) {
   }
 }
 
+DWORD STMClientWin::next_wait_ms() {
+  int wait_time = std::min(network_->wait_time(), overlays_.wait_time());
+  if (still_connecting()) {
+    wait_time = std::min(wait_time, 250);
+  }
+  /* Poll viewport size at 10 Hz; console ReadFile does not return resize. */
+  wait_time = wait_time < 0 ? 100 : std::clamp(wait_time, 0, 100);
+  return static_cast<DWORD>(wait_time);
+}
+
+void STMClientWin::drain_network() {
+  /* WSAEnumNetworkEvents resets every signaled FD_READ event. Drain the
+     Transport until Connection has tried every port-hop socket and all
+     return WSAEWOULDBLOCK, so no unread socket can lose its wakeup. */
+  for (;;) {
+    try {
+      process_network_input();
+    } catch (const Network::NetworkException &error) {
+      if (error.the_errno == WSAEWOULDBLOCK) {
+        return;
+      }
+      throw;
+    }
+  }
+}
+
+bool STMClientWin::handle_console_input() {
+  const std::string bytes = input_.take();
+  if (input_.error() != ERROR_SUCCESS) {
+    throw mosh::win32::ConsoleError("ReadFile(console input)", input_.error());
+  }
+  if (!process_user_input(bytes)) {
+    if (!network_->has_remote_addr()) {
+      return false;
+    }
+    request_shutdown(U"Exiting...");
+  }
+  return true;
+}
+
+bool STMClientWin::handle_console_signal() {
+  signal_.acknowledge();
+  if (!network_->has_remote_addr()) {
+    return false;
+  }
+  request_shutdown(U"Console signal received, shutting down...");
+  return true;
+}
+
+bool STMClientWin::shutdown_finished() {
+  if (network_->shutdown_in_progress() && network_->shutdown_acknowledged()) {
+    clean_shutdown_ = true;
+    return true;
+  }
+  if (network_->shutdown_in_progress() && network_->shutdown_ack_timed_out()) {
+    return true;
+  }
+  if (network_->counterparty_shutdown_ack_sent()) {
+    clean_shutdown_ = true;
+    return true;
+  }
+  return false;
+}
+
+void STMClientWin::update_connecting_notification() {
+  auto &notifications = overlays_.get_notification_engine();
+  const uint64_t silence =
+      timestamp() - network_->get_latest_remote_state().timestamp;
+  if (still_connecting() && !network_->shutdown_in_progress() &&
+      silence > 250) {
+    if (silence > 15000) {
+      request_shutdown(U"Timed out waiting for server...");
+    } else {
+      notifications.set_notification_string(connecting_notification_);
+    }
+  } else if (network_->get_remote_state_num() != 0 &&
+             notifications.get_notification_string() ==
+                 connecting_notification_) {
+    notifications.set_notification_string(U"");
+  }
+}
+
+void STMClientWin::publish_send_error() {
+  std::string &send_error = network_->get_send_error();
+  if (!send_error.empty()) {
+    overlays_.get_notification_engine().set_network_error(send_error);
+    send_error.clear();
+  } else {
+    overlays_.get_notification_engine().clear_network_error();
+  }
+}
+
 bool STMClientWin::main_loop() {
   if (!initialized_ || !network_) {
     throw std::logic_error("STMClientWin::init must be called first");
@@ -302,95 +401,28 @@ bool STMClientWin::main_loop() {
     try {
       freeze_timestamp();
       output_new_frame();
-      int wait_time = std::min(network_->wait_time(), overlays_.wait_time());
-      if (still_connecting()) {
-        wait_time = std::min(wait_time, 250);
-      }
-      /* Poll viewport size at 10 Hz; console ReadFile does not return resize. */
-      wait_time = wait_time < 0 ? 100 : std::clamp(wait_time, 0, 100);
-
+      const DWORD wait_ms = next_wait_ms();
       socket_events_.update(network_->fds());
       const auto events = socket_events_.wait(
-          input_.event_handle(), signal_.event_handle(),
-          static_cast<DWORD>(wait_time));
+          input_.event_handle(), signal_.event_handle(), wait_ms);
       freeze_timestamp();
 
       if (events.network_ready) {
-        /* WSAEnumNetworkEvents resets every signaled FD_READ event. Drain the
-           Transport until Connection has tried every port-hop socket and all
-           return WSAEWOULDBLOCK, so no unread socket can lose its wakeup. */
-        for (;;) {
-          try {
-            process_network_input();
-          } catch (const Network::NetworkException &error) {
-            if (error.the_errno == WSAEWOULDBLOCK) {
-              break;
-            }
-            throw;
-          }
-        }
+        drain_network();
       }
-      if (events.input_ready) {
-        const std::string bytes = input_.take();
-        if (input_.error() != ERROR_SUCCESS) {
-          throw mosh::win32::ConsoleError("ReadFile(console input)",
-                                          input_.error());
-        }
-        if (!process_user_input(bytes)) {
-          if (!network_->has_remote_addr()) {
-            break;
-          }
-          request_shutdown(U"Exiting...");
-        }
+      if (events.input_ready && !handle_console_input()) {
+        break;
       }
-      if (events.signal_ready) {
-        signal_.acknowledge();
-        if (!network_->has_remote_addr()) {
-          break;
-        }
-        request_shutdown(U"Console signal received, shutting down...");
+      if (events.signal_ready && !handle_console_signal()) {
+        break;
       }
-
       process_resize(console_.size());
-
-      if (network_->shutdown_in_progress() &&
-          network_->shutdown_acknowledged()) {
-        clean_shutdown_ = true;
+      if (shutdown_finished()) {
         break;
       }
-      if (network_->shutdown_in_progress() &&
-          network_->shutdown_ack_timed_out()) {
-        break;
-      }
-      if (network_->counterparty_shutdown_ack_sent()) {
-        clean_shutdown_ = true;
-        break;
-      }
-
-      if (still_connecting() && !network_->shutdown_in_progress() &&
-          timestamp() - network_->get_latest_remote_state().timestamp > 250) {
-        if (timestamp() - network_->get_latest_remote_state().timestamp >
-            15000) {
-          request_shutdown(U"Timed out waiting for server...");
-        } else {
-          overlays_.get_notification_engine().set_notification_string(
-              connecting_notification_);
-        }
-      } else if (network_->get_remote_state_num() != 0 &&
-                 overlays_.get_notification_engine()
-                         .get_notification_string() ==
-                     connecting_notification_) {
-        overlays_.get_notification_engine().set_notification_string(U"");
-      }
-
+      update_connecting_notification();
       network_->tick();
-      std::string &send_error = network_->get_send_error();
-      if (!send_error.empty()) {
-        overlays_.get_notification_engine().set_network_error(send_error);
-        send_error.clear();
-      } else {
-        overlays_.get_notification_engine().clear_network_error();
-      }
+      publish_send_error();
     } catch (const Network::NetworkException &error) {
       if (error.the_errno != WSAEWOULDBLOCK &&
           !network_->shutdown_in_progress()) {
