@@ -1,0 +1,107 @@
+diff --git a/src/crypto/crypto.h b/src/crypto/crypto.h
+--- a/src/crypto/crypto.h
++++ b/src/crypto/crypto.h
+@@ -96,6 +96,7 @@ namespace Crypto {
+     Base64Key(); /* random key */
+     Base64Key(PRNG &prng);
+     Base64Key( string printable_key );
++    ~Base64Key();
+     string printable_key( void ) const;
+     unsigned char *data( void ) { return key; }
+   };
+diff --git a/src/crypto/crypto.cc b/src/crypto/crypto.cc
+--- a/src/crypto/crypto.cc
++++ b/src/crypto/crypto.cc
+@@ -48,6 +48,34 @@
+ 
+ using namespace Crypto;
+ 
++namespace {
++
++void secure_erase_bytes( void *buffer, size_t length )
++{
++  volatile unsigned char *cursor =
++    static_cast<volatile unsigned char *>( buffer );
++  while ( length-- != 0 ) {
++    *cursor++ = 0;
++  }
++}
++
++class ScopedErase {
++private:
++  void *buffer;
++  size_t length;
++  bool active;
++
++public:
++  ScopedErase( void *s_buffer, size_t s_length )
++    : buffer( s_buffer ), length( s_length ), active( true ) {}
++  ~ScopedErase() { if ( active ) { secure_erase_bytes( buffer, length ); } }
++  void release( void ) { active = false; }
++  ScopedErase( const ScopedErase & ) = delete;
++  ScopedErase &operator=( const ScopedErase & ) = delete;
++};
++
++} /* anonymous namespace */
++
+ long int myatoi( const char *str )
+ {
+   char *end;
+@@ -111,11 +139,15 @@ AlignedBuffer::AlignedBuffer( size_t len, const char *data )
+ 
+ Base64Key::Base64Key( string printable_key )
+ {
++  ScopedErase printable_guard( printable_key.empty() ? NULL : &printable_key[ 0 ],
++                               printable_key.size() );
++  ScopedErase key_guard( key, sizeof( key ) );
+   if ( printable_key.length() != 22 ) {
+     throw CryptoException( "Key must be 22 letters long." );
+   }
+ 
+   string base64 = printable_key + "==";
++  ScopedErase base64_guard( &base64[ 0 ], base64.size() );
+ 
+   size_t len = 16;
+   if ( !base64_decode( base64.data(), 24, key, &len ) ) {
+@@ -130,21 +162,32 @@ Base64Key::Base64Key( string printable_key )
+   if ( printable_key != this->printable_key() ) {
+     throw CryptoException( "Base64 key was not encoded 128-bit key." );
+   }
++  key_guard.release();
+ }
+ 
+ Base64Key::Base64Key()
+ {
++  ScopedErase key_guard( key, sizeof( key ) );
+   PRNG().fill( key, sizeof( key ) );
++  key_guard.release();
+ }
+ 
+ Base64Key::Base64Key(PRNG &prng)
+ {
++  ScopedErase key_guard( key, sizeof( key ) );
+   prng.fill( key, sizeof( key ) );
++  key_guard.release();
++}
++
++Base64Key::~Base64Key()
++{
++  secure_erase_bytes( key, sizeof( key ) );
+ }
+ 
+ string Base64Key::printable_key( void ) const
+ {
+   char base64[ 24 ];
++  ScopedErase base64_guard( base64, sizeof( base64 ) );
+   
+   base64_encode( key, 16, base64, 24 );
+ 
+@@ -154,7 +197,7 @@ string Base64Key::printable_key( void ) const
+   }
+ 
+   base64[ 22 ] = 0;
+-  return string( base64 );
++  return string( base64, 22 );
+ }
+ 
+ Session::Session( Base64Key s_key )

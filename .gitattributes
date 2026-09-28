@@ -1,0 +1,9 @@
+# Normalize text files to LF in the repository and in every checkout, so
+# source bundles and reproducible builds do not depend on core.autocrlf.
+* text=auto eol=lf
+
+# Patches are applied verbatim to LF upstream sources; never convert them.
+*.patch -text
+
+# Vendored license documents are kept byte-for-byte.
+third_party/licenses/** -text

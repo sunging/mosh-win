@@ -1,0 +1,69 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 28,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "mingw64-base",
+      "hidden": true,
+      "generator": "MinGW Makefiles",
+      "toolchainFile": "${sourceDir}/cmake/toolchains/mingw64-ucrt.cmake",
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "environment": {
+        "SOURCE_DATE_EPOCH": "1666915200"
+      },
+      "cacheVariables": {
+        "BUILD_SHARED_LIBS": "OFF",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "MOSH_BUILD_TESTS": "ON"
+      }
+    },
+    {
+      "name": "mingw64-dev",
+      "displayName": "MinGW64 development",
+      "inherits": "mingw64-base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "MOSH_REQUIRE_COMPLETE_PORT": "OFF"
+      }
+    },
+    {
+      "name": "mingw64-release",
+      "displayName": "MinGW64 static release",
+      "inherits": "mingw64-base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "MOSH_REQUIRE_COMPLETE_PORT": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "mingw64-dev",
+      "configurePreset": "mingw64-dev",
+      "jobs": 4
+    },
+    {
+      "name": "mingw64-release",
+      "configurePreset": "mingw64-release",
+      "jobs": 4
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "mingw64-dev",
+      "configurePreset": "mingw64-dev",
+      "output": { "outputOnFailure": true },
+      "execution": { "noTestsAction": "error" }
+    },
+    {
+      "name": "mingw64-release",
+      "configurePreset": "mingw64-release",
+      "output": { "outputOnFailure": true },
+      "execution": { "noTestsAction": "error" }
+    }
+  ]
+}

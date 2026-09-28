@@ -1,0 +1,16 @@
+/build/
+/out/
+/dist/
+/.cache/
+/_deps/
+/.agents/
+/.codex/
+/.vscode/
+/.idea/
+/CMakeUserPresets.json
+*.o
+*.obj
+*.exe
+*.pdb
+*.dSYM/
+*.zip

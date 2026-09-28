@@ -1,0 +1,774 @@
+diff --git a/src/frontend/terminaloverlay.cc b/src/frontend/terminaloverlay.cc
+index adee673..75bc27f 100644
+--- a/src/frontend/terminaloverlay.cc
++++ b/src/frontend/terminaloverlay.cc
+@@ -37,6 +37,7 @@
+ #include <limits.h>
+ 
+ #include "terminaloverlay.h"
++#include "platform/utf8.h"
+ 
+ using namespace Overlay;
+ 
+@@ -207,9 +208,6 @@ void NotificationEngine::apply( Framebuffer &fb ) const
+     *(fb.get_mutable_cell( 0, i )) = notification_bar;
+   }
+ 
+-  /* write message */
+-  wchar_t tmp[ 128 ];
+-
+   /* We want to prefer the "last contact" message if we simply haven't
+      heard from the server in a while, but print the "last reply" message
+      if the problem is uplink-only. */
+@@ -234,34 +232,36 @@ void NotificationEngine::apply( Framebuffer &fb ) const
+   if ( message.empty() && (!time_expired) ) {
+     return;
+   }
++  u32string string_to_draw = U"mosh: ";
+   if ( message.empty() && time_expired ) {
+-    swprintf( tmp, 128, L"mosh: Last %s %s ago.%s", explanation,
+-	      human_readable_duration( static_cast<int>( time_elapsed ),
+-				       "seconds" ).c_str(),
+-	      keystroke_str );
++    string_to_draw += mosh::win32::utf8::decode(
++      string( "Last " ) + explanation + " " +
++      human_readable_duration( static_cast<int>( time_elapsed ), "seconds" ) +
++      " ago." + keystroke_str );
+   } else if ( (!message.empty()) && (!time_expired) ) {
+-    swprintf( tmp, 128, L"mosh: %ls%s", message.c_str(), keystroke_str );
++    string_to_draw += message;
++    string_to_draw += mosh::win32::utf8::decode( keystroke_str );
+   } else {
+-    swprintf( tmp, 128, L"mosh: %ls (%s without %s.)%s", message.c_str(),
+-	      human_readable_duration( static_cast<int>( time_elapsed ),
+-				       "s" ).c_str(),
+-	      explanation, keystroke_str );
++    string_to_draw += message;
++    string_to_draw += mosh::win32::utf8::decode(
++      string( " (" ) +
++      human_readable_duration( static_cast<int>( time_elapsed ), "s" ) +
++      " without " + explanation + ".)" + keystroke_str );
+   }
+ 
+-  wstring string_to_draw( tmp );
+-
+   int overlay_col = 0;
+ 
+   Cell *combining_cell = fb.get_mutable_cell( 0, 0 );
+ 
+   /* We unfortunately duplicate the terminal's logic for how to render a Unicode sequence into graphemes */
+-  for ( wstring::const_iterator i = string_to_draw.begin(); i != string_to_draw.end(); i++ ) {
++  for ( u32string::const_iterator i = string_to_draw.begin(); i != string_to_draw.end(); i++ ) {
+     if ( overlay_col >= fb.ds.get_width() ) {
+       break;
+     }
+ 
+-    wchar_t ch = *i;
+-    int chwidth = ch == L'\0' ? -1 : wcwidth( ch );
++    char32_t ch = *i;
++    int chwidth = ch == U'\0' ? -1 :
++      mosh::win32::utf8::display_width( ch );
+     Cell *this_cell = 0;
+ 
+     switch ( chwidth ) {
+@@ -339,7 +339,7 @@ void OverlayManager::apply( Framebuffer &fb )
+   title.apply( fb );
+ }
+ 
+-void TitleEngine::set_prefix( const wstring &s )
++void TitleEngine::set_prefix( const u32string &s )
+ {
+   prefix = Terminal::Framebuffer::title_type( s.begin(), s.end() );
+ }
+@@ -679,7 +679,7 @@ void PredictionEngine::new_user_byte( char the_byte, const Framebuffer &fb )
+ 
+     /*
+     fprintf( stderr, "Action: %s (%lc)\n",
+-	     act->name().c_str(), act->char_present ? act->ch : L'_' );
++	     act->name().c_str(), act->char_present ? act->ch : U'_' );
+     */
+ 
+     const std::type_info& type_act = typeid( act );
+@@ -690,7 +690,7 @@ void PredictionEngine::new_user_byte( char the_byte, const Framebuffer &fb )
+ 
+       assert( act.char_present );
+ 
+-      wchar_t ch = act.ch;
++      char32_t ch = act.ch;
+       /* XXX handle wide characters */
+ 
+       if ( ch == 0x7f ) { /* backspace */
+@@ -743,7 +743,8 @@ void PredictionEngine::new_user_byte( char the_byte, const Framebuffer &fb )
+ 	    }
+ 	  }
+ 	}
+-      } else if ( (ch < 0x20) || (wcwidth( ch ) != 1) ) {
++      } else if ( (ch < 0x20) ||
++                  (mosh::win32::utf8::display_width( ch ) != 1) ) {
+ 	/* unknown print */
+ 	become_tentative();
+ 	//	fprintf( stderr, "Unknown print 0x%x\n", ch );
+@@ -840,13 +841,13 @@ void PredictionEngine::new_user_byte( char the_byte, const Framebuffer &fb )
+       //      fprintf( stderr, "Escape sequence\n" );
+       become_tentative();
+     } else if ( type_act == typeid( Parser::CSI_Dispatch ) ) {
+-      if ( act.char_present && (act.ch == L'C') ) { /* right arrow */
++      if ( act.char_present && (act.ch == U'C') ) { /* right arrow */
+ 	init_cursor( fb );
+ 	if ( cursor().col < fb.ds.get_width() - 1 ) {
+ 	  cursor().col++;
+ 	  cursor().expire( local_frame_sent + 1, now );
+ 	}
+-      } else if ( act.char_present && (act.ch == L'D') ) { /* left arrow */
++      } else if ( act.char_present && (act.ch == U'D') ) { /* left arrow */
+ 	init_cursor( fb );
+ 	
+ 	if ( cursor().col > 0 ) {
+diff --git a/src/frontend/terminaloverlay.h b/src/frontend/terminaloverlay.h
+index 84421eb..791c705 100644
+--- a/src/frontend/terminaloverlay.h
++++ b/src/frontend/terminaloverlay.h
+@@ -37,6 +37,7 @@
+ #include "network.h"
+ #include "transportsender.h"
+ #include "parser.h"
++#include "platform/utf8.h"
+ 
+ #include <vector>
+ #include <limits.h>
+@@ -47,7 +48,7 @@ namespace Overlay {
+   using std::deque;
+   using std::list;
+   using std::vector;
+-  using std::wstring;
++  using std::u32string;
+ 
+   enum Validity {
+     Pending,
+@@ -142,7 +143,7 @@ namespace Overlay {
+     uint64_t last_word_from_server;
+     uint64_t last_acked_state;
+     string escape_key_string;
+-    wstring message;
++    u32string message;
+     bool message_is_network_error;
+     uint64_t message_expiration;
+     bool show_quit_keystroke;
+@@ -154,12 +155,12 @@ namespace Overlay {
+   public:
+     void adjust_message( void );
+     void apply( Framebuffer &fb ) const;
+-    const wstring &get_notification_string( void ) const { return message; }
++    const u32string &get_notification_string( void ) const { return message; }
+     void server_heard( uint64_t s_last_word ) { last_word_from_server = s_last_word; }
+     void server_acked( uint64_t s_last_acked ) { last_acked_state = s_last_acked; }
+     int wait_time( void ) const;
+ 
+-    void set_notification_string( const wstring &s_message, bool permanent = false, bool s_show_quit_keystroke = true )
++    void set_notification_string( const u32string &s_message, bool permanent = false, bool s_show_quit_keystroke = true )
+     {
+       message = s_message;
+       if ( permanent ) {
+@@ -180,10 +181,7 @@ namespace Overlay {
+ 
+     void set_network_error( const std::string &s )
+     {
+-      wchar_t tmp[ 128 ];
+-      swprintf( tmp, 128, L"%s", s.c_str() );
+-
+-      message = tmp;
++      message = mosh::win32::utf8::decode( s );
+       message_is_network_error = true;
+       message_expiration = timestamp() + Network::ACK_INTERVAL + 100;
+     }
+@@ -314,7 +312,7 @@ namespace Overlay {
+   public:
+     void apply( Framebuffer &fb ) const { fb.prefix_window_title( prefix ); }
+     TitleEngine() : prefix() {}
+-    void set_prefix( const wstring &s );
++    void set_prefix( const u32string &s );
+   };
+ 
+   /* the overlay manager */
+@@ -330,7 +328,7 @@ namespace Overlay {
+     NotificationEngine & get_notification_engine( void ) { return notifications; }
+     PredictionEngine & get_prediction_engine( void ) { return predictions; }
+ 
+-    void set_title_prefix( const wstring &s ) { title.set_prefix( s ); }
++    void set_title_prefix( const u32string &s ) { title.set_prefix( s ); }
+ 
+     OverlayManager() : notifications(), predictions(), title() {}
+ 
+diff --git a/src/terminal/parser.cc b/src/terminal/parser.cc
+index 2522d4c..d75ae2c 100644
+--- a/src/terminal/parser.cc
++++ b/src/terminal/parser.cc
+@@ -32,8 +32,6 @@
+ 
+ #include <assert.h>
+ #include <typeinfo>
+-#include <errno.h>
+-#include <wchar.h>
+ #include <stdint.h>
+ 
+ #include "parser.h"
+@@ -50,7 +48,7 @@ static void append_or_delete( Parser::ActionPointer act,
+   }
+ }
+ 
+-void Parser::Parser::input( wchar_t ch, Actions &ret )
++void Parser::Parser::input( char32_t ch, Actions &ret )
+ {
+   Transition tx = state->input( ch );
+ 
+@@ -67,91 +65,16 @@ void Parser::Parser::input( wchar_t ch, Actions &ret )
+ }
+ 
+ Parser::UTF8Parser::UTF8Parser()
+-  : parser(), buf_len( 0 )
++  : parser(), decoder()
+ {
+-  assert( BUF_SIZE >= (size_t)MB_CUR_MAX );
+-  buf[0] = '\0';
+ }
+ 
+ void Parser::UTF8Parser::input( char c, Actions &ret )
+ {
+-  assert( buf_len < BUF_SIZE );
+-
+-  /* 1-byte UTF-8 character, aka ASCII?  Cheat. */
+-  if ( buf_len == 0 && static_cast<unsigned char>(c) <= 0x7f ) {
+-    parser.input( static_cast<wchar_t>(c), ret );
+-    return;
+-  }
+-
+-  buf[ buf_len++ ] = c;
+-
+-  /* This function will only work in a UTF-8 locale. */
+-  wchar_t pwc;
+-  mbstate_t ps = mbstate_t();
+-
+-  size_t total_bytes_parsed = 0;
+-  size_t orig_buf_len = buf_len;
+-
+-  /* this routine is somewhat complicated in order to comply with
+-     Unicode 6.0, section 3.9, "Best Practices for using U+FFFD" */
+-
+-  while ( total_bytes_parsed != orig_buf_len ) {
+-    assert( total_bytes_parsed < orig_buf_len );
+-    assert( buf_len > 0 );
+-    size_t bytes_parsed = mbrtowc( &pwc, buf, buf_len, &ps );
+-
+-    /* this returns 0 when n = 0! */
+-
+-    if ( bytes_parsed == 0 ) {
+-      /* character was NUL, accept and clear buffer */
+-      assert( buf_len == 1 );
+-      buf_len = 0;
+-      pwc = L'\0';
+-      bytes_parsed = 1;
+-    } else if ( bytes_parsed == (size_t) -1 ) {
+-      /* invalid sequence, use replacement character and try again with last char */
+-      assert( errno == EILSEQ );
+-      if ( buf_len > 1 ) {
+-	buf[ 0 ] = buf[ buf_len - 1 ];
+-	bytes_parsed = buf_len - 1;
+-	buf_len = 1;
+-      } else {
+-	buf_len = 0;
+-	bytes_parsed = 1;
+-      }
+-      pwc = (wchar_t) 0xFFFD;
+-    } else if ( bytes_parsed == (size_t) -2 ) {
+-      /* can't parse incomplete multibyte character */
+-      total_bytes_parsed += buf_len;
+-      continue;
+-    } else {
+-      /* parsed into pwc, accept */
+-      assert( bytes_parsed <= buf_len );
+-      memmove( buf, buf + bytes_parsed, buf_len - bytes_parsed );
+-      buf_len = buf_len - bytes_parsed;
+-    }
+-
+-    /* Cast to unsigned for checks, because some
+-       platforms (e.g. ARM) use uint32_t as wchar_t,
+-       causing compiler warning on "pwc > 0" check. */
+-    const uint32_t pwcheck = pwc;
+-
+-    if ( pwcheck > 0x10FFFF ) { /* outside Unicode range */
+-      pwc = (wchar_t) 0xFFFD;
+-    }
+-
+-    if ( (pwcheck >= 0xD800) && (pwcheck <= 0xDFFF) ) { /* surrogate code point */
+-      /*
+-	OS X unfortunately allows these sequences without EILSEQ, but
+-	they are ill-formed UTF-8 and we shouldn't repeat them to the
+-	user's terminal.
+-      */
+-      pwc = (wchar_t) 0xFFFD;
+-    }
+-
+-    parser.input( pwc, ret );
+-
+-    total_bytes_parsed += bytes_parsed;
++  std::u32string codepoints;
++  decoder.feed( std::string_view( &c, 1 ), codepoints );
++  for ( const char32_t codepoint : codepoints ) {
++    parser.input( codepoint, ret );
+   }
+ }
+ 
+diff --git a/src/terminal/parser.h b/src/terminal/parser.h
+index c2979b5..8bdcefe 100644
+--- a/src/terminal/parser.h
++++ b/src/terminal/parser.h
+@@ -36,9 +36,10 @@
+ /* Based on Paul Williams's parser,
+    http://www.vt100.net/emu/dec_ansi_parser */
+ 
+-#include <wchar.h>
+ #include <string.h>
+ 
++#include "platform/utf8.h"
++
+ #include "parsertransition.h"
+ #include "parseraction.h"
+ #include "parserstate.h"
+@@ -58,7 +59,7 @@ namespace Parser {
+     Parser & operator=( const Parser & );
+     ~Parser() {}
+ 
+-    void input( wchar_t ch, Actions &actions );
++    void input( char32_t ch, Actions &actions );
+ 
+     void reset_input( void )
+     {
+@@ -67,14 +68,10 @@ namespace Parser {
+ 
+   };
+ 
+-  static const size_t BUF_SIZE = 8;
+-
+   class UTF8Parser {
+   private:
+     Parser parser;
+-
+-    char buf[ BUF_SIZE ];
+-    size_t buf_len;
++    mosh::win32::utf8::Decoder decoder;
+ 
+   public:
+     UTF8Parser();
+@@ -84,8 +81,7 @@ namespace Parser {
+     void reset_input( void )
+     {
+       parser.reset_input();
+-      buf[0] = '\0';
+-      buf_len = 0;
++      decoder.reset();
+     }
+   };
+ }
+diff --git a/src/terminal/parseraction.h b/src/terminal/parseraction.h
+index 61558d9..d42904f 100644
+--- a/src/terminal/parseraction.h
++++ b/src/terminal/parseraction.h
+@@ -46,7 +46,7 @@ namespace Parser {
+   class Action
+   {
+   public:
+-    wchar_t ch;
++    char32_t ch;
+     bool char_present;
+ 
+     virtual std::string name( void ) = 0;
+diff --git a/src/terminal/parserstate.cc b/src/terminal/parserstate.cc
+index 112f856..d3ded7e 100644
+--- a/src/terminal/parserstate.cc
++++ b/src/terminal/parserstate.cc
+@@ -36,7 +36,7 @@
+ 
+ using namespace Parser;
+ 
+-Transition State::anywhere_rule( wchar_t ch ) const
++Transition State::anywhere_rule( char32_t ch ) const
+ {
+   if ( (ch == 0x18) || (ch == 0x1A)
+        || ((0x80 <= ch) && (ch <= 0x8F))
+@@ -60,7 +60,7 @@ Transition State::anywhere_rule( wchar_t ch ) const
+   return Transition(( State * )NULL, ActionPointer() ); /* don't allocate an Ignore action */
+ }
+ 
+-Transition State::input( wchar_t ch ) const
++Transition State::input( char32_t ch ) const
+ {
+   /* Check for immediate transitions. */
+   Transition anywhere = anywhere_rule( ch );
+@@ -77,20 +77,20 @@ Transition State::input( wchar_t ch ) const
+   return ret;
+ }
+ 
+-static bool C0_prime( wchar_t ch )
++static bool C0_prime( char32_t ch )
+ {
+   return (ch <= 0x17)
+     || (ch == 0x19)
+     || ( (0x1C <= ch) && (ch <= 0x1F) );
+ }
+ 
+-static bool GLGR ( wchar_t ch )
++static bool GLGR ( char32_t ch )
+ {
+   return ( (0x20 <= ch) && (ch <= 0x7F) ) /* GL area */
+     || ( (0xA0 <= ch) && (ch <= 0xFF) ); /* GR area */
+ }
+ 
+-Transition Ground::input_state_rule( wchar_t ch ) const
++Transition Ground::input_state_rule( char32_t ch ) const
+ {
+   if ( C0_prime( ch ) ) {
+     return Transition( shared::make_shared< Execute >() );
+@@ -108,7 +108,7 @@ ActionPointer Escape::enter( void ) const
+   return shared::make_shared< Clear >();
+ }
+ 
+-Transition Escape::input_state_rule( wchar_t ch ) const
++Transition Escape::input_state_rule( char32_t ch ) const
+ {
+   if ( C0_prime( ch ) ) {
+     return Transition( shared::make_shared< Execute >() );
+@@ -146,7 +146,7 @@ Transition Escape::input_state_rule( wchar_t ch ) const
+   return Transition();
+ }
+ 
+-Transition Escape_Intermediate::input_state_rule( wchar_t ch ) const
++Transition Escape_Intermediate::input_state_rule( char32_t ch ) const
+ {
+   if ( C0_prime( ch ) ) {
+     return Transition( shared::make_shared< Execute >() );
+@@ -168,7 +168,7 @@ ActionPointer CSI_Entry::enter( void ) const
+   return shared::make_shared< Clear >();
+ }
+ 
+-Transition CSI_Entry::input_state_rule( wchar_t ch ) const
++Transition CSI_Entry::input_state_rule( char32_t ch ) const
+ {
+   if ( C0_prime( ch ) ) {
+     return Transition( shared::make_shared< Execute >() );
+@@ -198,7 +198,7 @@ Transition CSI_Entry::input_state_rule( wchar_t ch ) const
+   return Transition();
+ }
+ 
+-Transition CSI_Param::input_state_rule( wchar_t ch ) const
++Transition CSI_Param::input_state_rule( char32_t ch ) const
+ {
+   if ( C0_prime( ch ) ) {
+     return Transition( shared::make_shared< Execute >() );
+@@ -223,7 +223,7 @@ Transition CSI_Param::input_state_rule( wchar_t ch ) const
+   return Transition();
+ }
+ 
+-Transition CSI_Intermediate::input_state_rule( wchar_t ch ) const
++Transition CSI_Intermediate::input_state_rule( char32_t ch ) const
+ {
+   if ( C0_prime( ch ) ) {
+     return Transition( shared::make_shared< Execute >() );
+@@ -244,7 +244,7 @@ Transition CSI_Intermediate::input_state_rule( wchar_t ch ) const
+   return Transition();
+ }
+ 
+-Transition CSI_Ignore::input_state_rule( wchar_t ch ) const
++Transition CSI_Ignore::input_state_rule( char32_t ch ) const
+ {
+   if ( C0_prime( ch ) ) {
+     return Transition( shared::make_shared< Execute >() );
+@@ -262,7 +262,7 @@ ActionPointer DCS_Entry::enter( void ) const
+   return shared::make_shared< Clear >();
+ }
+ 
+-Transition DCS_Entry::input_state_rule( wchar_t ch ) const
++Transition DCS_Entry::input_state_rule( char32_t ch ) const
+ {
+   if ( (0x20 <= ch) && (ch <= 0x2F) ) {
+     return Transition( shared::make_shared< Collect >(), &family->s_DCS_Intermediate );
+@@ -287,7 +287,7 @@ Transition DCS_Entry::input_state_rule( wchar_t ch ) const
+   return Transition();
+ }
+ 
+-Transition DCS_Param::input_state_rule( wchar_t ch ) const
++Transition DCS_Param::input_state_rule( char32_t ch ) const
+ {
+   if ( ( (0x30 <= ch) && (ch <= 0x39) ) || ( ch == 0x3B ) ) {
+     return Transition( shared::make_shared< Param >() );
+@@ -308,7 +308,7 @@ Transition DCS_Param::input_state_rule( wchar_t ch ) const
+   return Transition();
+ }
+ 
+-Transition DCS_Intermediate::input_state_rule( wchar_t ch ) const
++Transition DCS_Intermediate::input_state_rule( char32_t ch ) const
+ {
+   if ( (0x20 <= ch) && (ch <= 0x2F) ) {
+     return Transition( shared::make_shared< Collect >() );
+@@ -335,7 +335,7 @@ ActionPointer DCS_Passthrough::exit( void ) const
+   return shared::make_shared< Unhook >();
+ }
+ 
+-Transition DCS_Passthrough::input_state_rule( wchar_t ch ) const
++Transition DCS_Passthrough::input_state_rule( char32_t ch ) const
+ {
+   if ( C0_prime( ch ) || ( (0x20 <= ch) && (ch <= 0x7E) ) ) {
+     return Transition( shared::make_shared< Put >() );
+@@ -348,7 +348,7 @@ Transition DCS_Passthrough::input_state_rule( wchar_t ch ) const
+   return Transition();
+ }
+ 
+-Transition DCS_Ignore::input_state_rule( wchar_t ch ) const
++Transition DCS_Ignore::input_state_rule( char32_t ch ) const
+ {
+   if ( ch == 0x9C ) {
+     return Transition( &family->s_Ground );
+@@ -367,7 +367,7 @@ ActionPointer OSC_String::exit( void ) const
+   return shared::make_shared< OSC_End >();
+ }
+ 
+-Transition OSC_String::input_state_rule( wchar_t ch ) const
++Transition OSC_String::input_state_rule( char32_t ch ) const
+ {
+   if ( (0x20 <= ch) && (ch <= 0x7F) ) {
+     return Transition( shared::make_shared< OSC_Put >() );
+@@ -380,7 +380,7 @@ Transition OSC_String::input_state_rule( wchar_t ch ) const
+   return Transition();
+ }
+ 
+-Transition SOS_PM_APC_String::input_state_rule( wchar_t ch ) const
++Transition SOS_PM_APC_String::input_state_rule( char32_t ch ) const
+ {
+   if ( ch == 0x9C ) {
+     return Transition( &family->s_Ground );
+diff --git a/src/terminal/parserstate.h b/src/terminal/parserstate.h
+index 39116e6..4c62686 100644
+--- a/src/terminal/parserstate.h
++++ b/src/terminal/parserstate.h
+@@ -41,15 +41,15 @@ namespace Parser {
+   class State
+   {
+   protected:
+-    virtual Transition input_state_rule( wchar_t ch ) const = 0;
++    virtual Transition input_state_rule( char32_t ch ) const = 0;
+     StateFamily *family;
+ 
+   private:
+-    Transition anywhere_rule( wchar_t ch ) const;
++    Transition anywhere_rule( char32_t ch ) const;
+ 
+   public:
+     void setfamily( StateFamily *s_family ) { family = s_family; }
+-    Transition input( wchar_t ch ) const;
++    Transition input( char32_t ch ) const;
+     virtual ActionPointer enter( void ) const { return shared::make_shared< Ignore >(); }
+     virtual ActionPointer exit( void ) const { return shared::make_shared< Ignore >(); }
+ 
+@@ -61,58 +61,58 @@ namespace Parser {
+   };
+ 
+   class Ground : public State {
+-    Transition input_state_rule( wchar_t ch ) const;
++    Transition input_state_rule( char32_t ch ) const;
+   };
+ 
+   class Escape : public State {
+     ActionPointer enter( void ) const;
+-    Transition input_state_rule( wchar_t ch ) const;
++    Transition input_state_rule( char32_t ch ) const;
+   };
+ 
+   class Escape_Intermediate : public State {
+-    Transition input_state_rule( wchar_t ch ) const;
++    Transition input_state_rule( char32_t ch ) const;
+   };
+ 
+   class CSI_Entry : public State {
+     ActionPointer enter( void ) const;
+-    Transition input_state_rule( wchar_t ch ) const;
++    Transition input_state_rule( char32_t ch ) const;
+   };
+   class CSI_Param : public State {
+-    Transition input_state_rule( wchar_t ch ) const;
++    Transition input_state_rule( char32_t ch ) const;
+   };
+   class CSI_Intermediate : public State {
+-    Transition input_state_rule( wchar_t ch ) const;
++    Transition input_state_rule( char32_t ch ) const;
+   };
+   class CSI_Ignore : public State {
+-    Transition input_state_rule( wchar_t ch ) const;
++    Transition input_state_rule( char32_t ch ) const;
+   };
+   
+   class DCS_Entry : public State {
+     ActionPointer enter( void ) const;
+-    Transition input_state_rule( wchar_t ch ) const;
++    Transition input_state_rule( char32_t ch ) const;
+   };
+   class DCS_Param : public State {
+-    Transition input_state_rule( wchar_t ch ) const;
++    Transition input_state_rule( char32_t ch ) const;
+   };
+   class DCS_Intermediate : public State {
+-    Transition input_state_rule( wchar_t ch ) const;
++    Transition input_state_rule( char32_t ch ) const;
+   };
+   class DCS_Passthrough : public State {
+     ActionPointer enter( void ) const;
+-    Transition input_state_rule( wchar_t ch ) const;
++    Transition input_state_rule( char32_t ch ) const;
+     ActionPointer exit( void ) const;
+   };
+   class DCS_Ignore : public State {
+-    Transition input_state_rule( wchar_t ch ) const;
++    Transition input_state_rule( char32_t ch ) const;
+   };
+ 
+   class OSC_String : public State {
+     ActionPointer enter( void ) const;
+-    Transition input_state_rule( wchar_t ch ) const;
++    Transition input_state_rule( char32_t ch ) const;
+     ActionPointer exit( void ) const;
+   };
+   class SOS_PM_APC_String : public State {
+-    Transition input_state_rule( wchar_t ch ) const;
++    Transition input_state_rule( char32_t ch ) const;
+   };
+ }
+ 
+diff --git a/src/terminal/terminal.cc b/src/terminal/terminal.cc
+index 057b3d0..477e26e 100644
+--- a/src/terminal/terminal.cc
++++ b/src/terminal/terminal.cc
+@@ -37,6 +37,7 @@
+ #include <typeinfo>
+ 
+ #include "terminal.h"
++#include "platform/utf8.h"
+ 
+ using namespace Terminal;
+ 
+@@ -60,13 +61,15 @@ void Emulator::print( const Parser::Print *act )
+ {
+   assert( act->char_present );
+ 
+-  const wchar_t ch = act->ch;
++  const char32_t ch = act->ch;
+ 
+   /*
+    * Check for printing ISO 8859-1 first, it's a cheap way to detect
+    * some common narrow characters.
+    */
+-  const int chwidth = ch == L'\0' ? -1 : ( Cell::isprint_iso8859_1( ch ) ? 1 : wcwidth( ch ));
++  const int chwidth = ch == U'\0' ? -1 :
++    ( Cell::isprint_iso8859_1( ch ) ? 1 :
++      mosh::win32::utf8::display_width( ch ) );
+ 
+   Cell *this_cell = fb.get_mutable_cell();
+ 
+diff --git a/src/terminal/terminaldispatcher.h b/src/terminal/terminaldispatcher.h
+index cc92c2e..2ddc3a2 100644
+--- a/src/terminal/terminaldispatcher.h
++++ b/src/terminal/terminaldispatcher.h
+@@ -86,7 +86,7 @@ namespace Terminal {
+     bool parsed;
+ 
+     std::string dispatch_chars;
+-    std::vector<wchar_t> OSC_string; /* only used to set the window title */
++    std::vector<char32_t> OSC_string; /* only used to set the window title */
+ 
+     void parse_params( void );
+ 
+@@ -108,7 +108,7 @@ namespace Terminal {
+ 
+     void dispatch( Function_Type type, const Parser::Action *act, Framebuffer *fb );
+     std::string get_dispatch_chars( void ) const { return dispatch_chars; }
+-    std::vector<wchar_t> get_OSC_string( void ) const { return OSC_string; }
++    std::vector<char32_t> get_OSC_string( void ) const { return OSC_string; }
+ 
+     void OSC_put( const Parser::OSC_Put *act );
+     void OSC_start( const Parser::OSC_Start *act );
+diff --git a/src/terminal/terminaldisplay.h b/src/terminal/terminaldisplay.h
+index 81009b0..9c473de 100644
+--- a/src/terminal/terminaldisplay.h
++++ b/src/terminal/terminaldisplay.h
+@@ -51,7 +51,7 @@ namespace Terminal {
+ 
+     void append( char c ) { str.append( 1, c ); }
+     void append( size_t s, char c ) { str.append( s, c ); }
+-    void append( wchar_t wc ) { Cell::append_to_str( str, wc ); }
++    void append( char32_t wc ) { Cell::append_to_str( str, wc ); }
+     void append( const char * s ) { str.append( s ); }
+     void append_string( const std::string &append ) { str.append(append); }
+ 
+diff --git a/src/terminal/terminalframebuffer.h b/src/terminal/terminalframebuffer.h
+index de93869..175483f 100644
+--- a/src/terminal/terminalframebuffer.h
++++ b/src/terminal/terminalframebuffer.h
+@@ -43,6 +43,7 @@
+ #include <list>
+ 
+ #include "shared.h"
++#include "platform/utf8.h"
+ 
+ /* Terminal framebuffer */
+ 
+@@ -147,39 +148,19 @@ namespace Terminal {
+     bool compare( const Cell &other ) const;
+ 
+     // Is this a printing ISO 8859-1 character?
+-    static bool isprint_iso8859_1( const wchar_t c )
++    static bool isprint_iso8859_1( const char32_t c )
+     {
+       return ( c <= 0xff && c >= 0xa0 ) || ( c <= 0x7e && c >= 0x20 );
+     }
+ 
+-   static void append_to_str( std::string &dest, const wchar_t c )
++   static void append_to_str( std::string &dest, const char32_t c )
+     {
+-      /* ASCII?  Cheat. */
+-      if ( static_cast<uint32_t>(c) <= 0x7f ) {
+-	dest.push_back( static_cast<char>(c) );
+-	return;
+-      }
+-      static mbstate_t ps = mbstate_t();
+-      char tmp[MB_LEN_MAX];
+-      size_t ignore = wcrtomb(NULL, 0, &ps);
+-      (void)ignore;
+-      size_t len = wcrtomb(tmp, c, &ps);
+-      dest.append( tmp, len );
++      mosh::win32::utf8::append( dest, c );
+     }
+ 
+-    void append( const wchar_t c )
++    void append( const char32_t c )
+     {
+-      /* ASCII?  Cheat. */
+-      if ( static_cast<uint32_t>(c) <= 0x7f ) {
+-	contents.push_back( static_cast<char>(c) );
+-	return;
+-      }
+-      static mbstate_t ps = mbstate_t();
+-      char tmp[MB_LEN_MAX];
+-      size_t ignore = wcrtomb(NULL, 0, &ps);
+-      (void)ignore;
+-      size_t len = wcrtomb(tmp, c, &ps);
+-      contents.insert( contents.end(), tmp, tmp+len );
++      mosh::win32::utf8::append( contents, c );
+     }
+ 
+     void print_grapheme( std::string &output ) const
+@@ -371,7 +352,7 @@ namespace Terminal {
+     // are equal, then the rows are obviously identical.
+     // * If no row is shared, the frame has not been modified.
+   public:
+-    typedef std::vector<wchar_t> title_type;
++    typedef std::vector<char32_t> title_type;
+     typedef shared_ptr<Row> row_pointer;
+     typedef std::vector<row_pointer> rows_type; /* can be either std::vector or std::deque */
+ 

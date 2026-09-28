@@ -1,0 +1,37 @@
+diff --git a/src/network/network.h b/src/network/network.h
+index f6ad0d5..5fb41c0 100644
+--- a/src/network/network.h
++++ b/src/network/network.h
+@@ -33,6 +33,10 @@
+ #ifndef NETWORK_HPP
+ #define NETWORK_HPP
+ 
++#ifdef _WIN32
++#include "platform/mosh_network_win32.h"
++#else
++
+ #include <stdint.h>
+ #include <deque>
+ #include <sys/socket.h>
+@@ -233,4 +237,6 @@ namespace Network {
+   };
+ }
+ 
++#endif /* !_WIN32 */
++
+ #endif
+diff --git a/src/network/networktransport.h b/src/network/networktransport.h
+index 342d46e..c9a6e18 100644
+--- a/src/network/networktransport.h
++++ b/src/network/networktransport.h
+@@ -104,6 +104,10 @@ namespace Network {
+     const TimestampedState<RemoteState> & get_latest_remote_state( void ) const { return received_states.back(); }
+ 
++#ifdef _WIN32
++    const std::vector< SocketHandle > fds( void ) const { return connection.fds(); }
++#else
+     const std::vector< int > fds( void ) const { return connection.fds(); }
++#endif
+ 
+     void set_verbose( unsigned int s_verbose ) { sender.set_verbose( s_verbose ); verbose = s_verbose; }
+ 

@@ -1,0 +1,173 @@
+diff --git a/src/crypto/ocb_internal.cc b/src/crypto/ocb_internal.cc
+index 791b60d..1725c03 100644
+--- a/src/crypto/ocb_internal.cc
++++ b/src/crypto/ocb_internal.cc
+@@ -32,8 +32,8 @@
+ 
+ /* This module implements the ae.h interface for OpenSSL, Apple Common
+ /  Crypto, and Nettle.                                                     */
+-#if !defined(USE_OPENSSL_AES) && !defined(USE_APPLE_COMMON_CRYPTO_AES) && \
+-    !defined(USE_NETTLE_AES)
++#if !defined(USE_OPENSSL_AES) && !defined(USE_BCRYPT_AES) && \
++    !defined(USE_APPLE_COMMON_CRYPTO_AES) && !defined(USE_NETTLE_AES)
+ #error ocb_internal.cc only works with OpenSSL, Apple Common Crypto, or Nettle
+ #endif
+ 
+@@ -471,6 +471,69 @@ static void ecb_decrypt_blks(block *blks, unsigned nblks, KEY *key) {
+ 
+ #define BPI 4  /* Number of blocks in buffer per ECB call */
+ 
++/*-------------------*/
++#elif USE_BCRYPT_AES
++/*-------------------*/
++
++#include "platform/win32_crypto.h"
++#include <memory>
++
++namespace ocb_aes {
++
++struct KEY {
++    std::unique_ptr<mosh::win32::Aes128Ecb> implementation;
++};
++
++static KEY *KEY_new() { return new KEY; }
++
++static void KEY_delete(KEY *key) { delete key; }
++
++static void set_encrypt_key(const unsigned char *user_key, int bits, KEY *key)
++{
++    fatal_assert(bits == 128);
++    key->implementation =
++        std::make_unique<mosh::win32::Aes128Ecb>(user_key);
++}
++
++static void set_decrypt_key(const unsigned char *user_key, int bits, KEY *key)
++{
++    fatal_assert(bits == 128);
++    key->implementation =
++        std::make_unique<mosh::win32::Aes128Ecb>(user_key);
++}
++
++static void encrypt(const unsigned char *source, unsigned char *destination,
++                    KEY *key)
++{
++    fatal_assert(key != NULL && key->implementation != NULL);
++    key->implementation->encrypt_blocks(source, destination, 1);
++}
++
++#if 0
++static void decrypt(const unsigned char *source, unsigned char *destination,
++                    KEY *key)
++{
++    fatal_assert(key != NULL && key->implementation != NULL);
++    key->implementation->decrypt_blocks(source, destination, 1);
++}
++#endif
++
++static void ecb_encrypt_blks(block *blocks, unsigned count, KEY *key)
++{
++    fatal_assert(key != NULL && key->implementation != NULL);
++    key->implementation->encrypt_blocks(blocks, blocks, count);
++}
++
++static void ecb_decrypt_blks(block *blocks, unsigned count, KEY *key)
++{
++    fatal_assert(key != NULL && key->implementation != NULL);
++    key->implementation->decrypt_blocks(blocks, blocks, count);
++}
++
++}  // namespace ocb_aes
++
++#define BPI 4  /* Number of blocks in buffer per ECB call */
++
+ /*-------------------*/
+ #elif USE_APPLE_COMMON_CRYPTO_AES
+ /*-------------------*/
+diff --git a/src/crypto/prng.h b/src/crypto/prng.h
+index 22f9d7d..6a8f9fe 100644
+--- a/src/crypto/prng.h
++++ b/src/crypto/prng.h
+@@ -34,7 +34,11 @@
+ 
+ #include <string>
+ #include <stdint.h>
++#ifdef _WIN32
++#include "platform/win32_crypto.h"
++#else
+ #include <fstream>
++#endif
+ 
+ #include "crypto.h"
+ 
+@@ -47,6 +51,8 @@ using namespace Crypto;
+ class PRNG {
+  private:
++#ifndef _WIN32
+   std::ifstream randfile;
++#endif
+ 
+   /* unimplemented to satisfy -Weffc++ */
+   PRNG( const PRNG & );
+@@ -55,17 +61,25 @@ class PRNG {
+   PRNG & operator=( const PRNG & );
+ 
+  public:
++#ifdef _WIN32
++  PRNG() = default;
++#else
+   PRNG() : randfile( rdev, std::ifstream::in | std::ifstream::binary ) {}
++#endif
+ 
+   void fill( void *dest, size_t size ) {
+     if ( 0 == size ) {
+       return;
+     }
+ 
++#ifdef _WIN32
++    mosh::win32::secure_random( dest, size );
++#else
+     randfile.read( static_cast<char *>( dest ), size );
+     if ( !randfile ) {
+       throw CryptoException( "Could not read from " + std::string( rdev ) );
+     }
++#endif
+   }
+ 
+   uint8_t uint8() {
+diff --git a/src/crypto/crypto.cc b/src/crypto/crypto.cc
+index eb9fa62..b8f27c3 100644
+--- a/src/crypto/crypto.cc
++++ b/src/crypto/crypto.cc
+@@ -34,7 +34,9 @@
+ #include <errno.h>
+ #include <stdlib.h>
+ #include <assert.h>
++#ifndef _WIN32
+ #include <sys/resource.h>
++#endif
+ #include <fstream>
+ 
+ #include "byteorder.h"
+@@ -218,6 +220,7 @@ const Message Session::decrypt( const char *str, size_t len )
+   return ret;
+ }
+ 
++#ifndef _WIN32
+ static rlim_t saved_core_rlimit;
+ 
+ /* Disable dumping core, as a precaution to avoid saving sensitive data
+@@ -252,3 +255,14 @@ void Crypto::reenable_dumping_core( void ) {
+     setrlimit( RLIMIT_CORE, &limit );
+   }
+ }
++#else
++/* Windows Error Reporting does not create traditional Unix core files.
++   Secret buffers are explicitly zeroed by the native platform layer. */
++void Crypto::disable_dumping_core( void )
++{
++}
++
++void Crypto::reenable_dumping_core( void )
++{
++}
++#endif
