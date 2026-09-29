@@ -12,8 +12,12 @@ FetchContent_Declare(mosh_upstream
 
 set(ZLIB_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(SKIP_INSTALL_ALL ON CACHE BOOL "" FORCE)
+# FetchContent tries the URLs in order; both serve the identical archive, and
+# the hash below is verified whichever one answers.
 FetchContent_Declare(zlib
-  URL "https://zlib.net/fossils/zlib-1.3.1.tar.gz"
+  URL
+    "https://zlib.net/fossils/zlib-1.3.1.tar.gz"
+    "https://github.com/madler/zlib/releases/download/v1.3.1/zlib-1.3.1.tar.gz"
   URL_HASH "SHA256=9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23"
   EXCLUDE_FROM_ALL
   SYSTEM)
