@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "ae.h"
 #include "test_support.h"
 #include "crypto.h"

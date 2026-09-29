@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 set(_launcher_source_dir "${PROJECT_SOURCE_DIR}/src/launcher")
 
 add_executable(mosh-test-fake-ssh launcher/fake_ssh.cc)

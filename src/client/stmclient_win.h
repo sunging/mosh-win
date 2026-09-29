@@ -1,6 +1,6 @@
 /*
  * Native Windows frontend for the Mosh 1.4 state synchronization client.
- * GPL-3.0-or-later
+ * SPDX-License-Identifier: GPL-3.0-or-later
  */
 #pragma once
 

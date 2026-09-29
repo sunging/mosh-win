@@ -6,6 +6,8 @@ ZIP packages plus SHA256SUMS.txt to dist/.
 .PARAMETER Version
 Package version; defaults to the version declared in CMakeLists.txt.
 #>
+
+# SPDX-License-Identifier: GPL-3.0-or-later
 [CmdletBinding()]
 param(
     [string]$Version,

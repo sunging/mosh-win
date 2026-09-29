@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "platform/utf8.h"
 #include "test_support.h"
 #include "platform/win32_socket.h"

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
 set -euo pipefail
 
 STATE_DIR="${MOSH_WIN_SSHD_STATE_DIR:-/tmp/mosh-win-sshd}"

@@ -1,4 +1,4 @@
-/* Native mosh-client entry point. GPL-3.0-or-later */
+/* Native mosh-client entry point. SPDX-License-Identifier: GPL-3.0-or-later */
 #include "stmclient_win.h"
 
 #include "crypto.h"

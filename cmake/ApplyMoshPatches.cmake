@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Apply the patch series in patches/series to the fetched upstream Mosh tree.
 #
 # Application is idempotent: a patch whose reverse applies cleanly is treated

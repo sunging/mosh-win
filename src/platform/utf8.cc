@@ -1,6 +1,6 @@
 /*
  * Unicode helpers for the native Windows Mosh client.
- * GPL-3.0-or-later
+ * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 #include "utf8.h"

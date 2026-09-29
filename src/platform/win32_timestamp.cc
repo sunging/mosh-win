@@ -1,4 +1,4 @@
-/* Native implementation of Mosh util/timestamp.cc. GPL-3.0-or-later */
+/* Native implementation of Mosh util/timestamp.cc. SPDX-License-Identifier: GPL-3.0-or-later */
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif

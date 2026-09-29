@@ -3,6 +3,8 @@
 Runs CTest for a configured preset and audits the shipped executables' PE
 imports.
 #>
+
+# SPDX-License-Identifier: GPL-3.0-or-later
 [CmdletBinding()]
 param(
     [ValidateSet('Debug', 'Release')]

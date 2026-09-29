@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 set(MOSH_UPSTREAM_ROOT "${mosh_upstream_SOURCE_DIR}")
 set(MOSH_UPSTREAM_SRC "${MOSH_UPSTREAM_ROOT}/src")
 set(MOSH_GENERATED_ROOT "${CMAKE_BINARY_DIR}/generated")

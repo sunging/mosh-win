@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 #include "launcher_core.h"
 
 #define WIN32_LEAN_AND_MEAN

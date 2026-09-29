@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 # mosh_prefix_map_flags(<out-var> <from> <to>)
 #
 # Produce -ffile-prefix-map/-fdebug-prefix-map options that rewrite <from> to

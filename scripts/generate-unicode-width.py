@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Generate the checked-in Unicode 17 terminal-width interval table.
 
 The build does not run this script.  It is a maintainer tool: download the

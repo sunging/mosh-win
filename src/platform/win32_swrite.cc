@@ -1,4 +1,4 @@
-/* Native implementation of Mosh util/swrite.cc. GPL-3.0-or-later */
+/* Native implementation of Mosh util/swrite.cc. SPDX-License-Identifier: GPL-3.0-or-later */
 #include <sys/types.h>
 #include "swrite.h"
 

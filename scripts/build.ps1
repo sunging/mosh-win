@@ -14,6 +14,8 @@ example third_party/source from the corresponding-source package).
 MinGW-w64 UCRT toolchain root. Defaults to $env:MINGW64_ROOT, then to the
 toolchain whose gcc.exe is on PATH.
 #>
+
+# SPDX-License-Identifier: GPL-3.0-or-later
 [CmdletBinding()]
 param(
     [ValidateSet('Debug', 'Release')]

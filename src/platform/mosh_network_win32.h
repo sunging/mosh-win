@@ -1,6 +1,6 @@
 /*
  * Native Winsock implementation of Mosh 1.4's network.h interface.
- * GPL-3.0-or-later
+ * SPDX-License-Identifier: GPL-3.0-or-later
  */
 #pragma once
 

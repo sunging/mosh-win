@@ -1,4 +1,4 @@
-/* GPL-3.0-or-later */
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "win32_socket.h"
 #include "win32_error.h"
 

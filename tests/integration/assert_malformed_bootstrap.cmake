@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 if(NOT DEFINED LAUNCHER OR NOT EXISTS "${LAUNCHER}")
   message(FATAL_ERROR "LAUNCHER is missing or does not exist: ${LAUNCHER}")
 endif()

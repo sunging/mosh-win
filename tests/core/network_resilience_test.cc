@@ -1,4 +1,4 @@
-/* GPL-3.0-or-later */
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "platform/mosh_network_win32.h"
 #include "test_support.h"
 

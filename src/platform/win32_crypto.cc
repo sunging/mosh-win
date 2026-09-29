@@ -1,7 +1,7 @@
 /*
  * Mosh: the mobile shell
  * Copyright 2026 The mosh-win contributors
- * GPL-3.0-or-later
+ * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 #include "win32_crypto.h"

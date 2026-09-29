@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Shared helpers for the mosh-win build, test and packaging scripts.
 #
 # Every function throws on failure, so callers only need

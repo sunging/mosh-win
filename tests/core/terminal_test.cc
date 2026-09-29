@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "completeterminal.h"
 #include "test_support.h"
 #include "hostinput.pb.h"

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 include(FetchContent)
 
 cmake_policy(SET CMP0135 NEW)

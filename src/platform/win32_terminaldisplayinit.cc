@@ -1,4 +1,4 @@
-/* Native VT profile for Terminal::Display. GPL-3.0-or-later */
+/* Native VT profile for Terminal::Display. SPDX-License-Identifier: GPL-3.0-or-later */
 #include "terminaldisplay.h"
 
 #include <cstdlib>

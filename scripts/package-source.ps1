@@ -10,6 +10,8 @@ Release build directory whose _deps/<name>-src trees are bundled.
 Bundle these dependency trees instead (for builds configured with
 -DependencySourceRoot).
 #>
+
+# SPDX-License-Identifier: GPL-3.0-or-later
 [CmdletBinding()]
 param(
     [string]$Version,

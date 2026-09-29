@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
 /* Shared helpers for the standalone core test executables. */
 #pragma once
 

@@ -1,4 +1,4 @@
-/* Native implementation of Mosh util/locale_utils.cc. GPL-3.0-or-later */
+/* Native implementation of Mosh util/locale_utils.cc. SPDX-License-Identifier: GPL-3.0-or-later */
 #include "locale_utils.h"
 
 #include <clocale>

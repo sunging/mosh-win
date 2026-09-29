@@ -6,6 +6,8 @@ and mosh-client.exe are bit-identical.
 .PARAMETER DependencySourceRoot
 Build offline from these dependency trees instead of downloading them.
 #>
+
+# SPDX-License-Identifier: GPL-3.0-or-later
 [CmdletBinding()]
 param(
     [string]$DependencySourceRoot

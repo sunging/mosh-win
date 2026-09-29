@@ -8,6 +8,8 @@ MinGW runtime DLL or a third-party library that must be linked statically,
 or (unless -AllowUnknownSystemDll) any DLL outside the reviewed list.
 All problems are reported before the script fails.
 #>
+
+# SPDX-License-Identifier: GPL-3.0-or-later
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)]
