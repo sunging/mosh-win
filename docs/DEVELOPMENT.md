@@ -40,6 +40,7 @@ Both presets use the MinGW Makefiles generator, export
 | `MOSH_APPLY_UPSTREAM_PATCHES` | `ON` | Apply `patches/series` to the fetched Mosh tree. |
 | `FETCHCONTENT_SOURCE_DIR_<DEP>` | unset | Use an existing `mosh_upstream`, `protobuf` or `zlib` tree (set by `build.ps1 -DependencySourceRoot`). |
 | `FETCHCONTENT_FULLY_DISCONNECTED` | `OFF` | Never download (set by `build.ps1 -Offline`). |
+| `CMAKE_INSTALL_PREFIX` | `%ProgramW6432%\mosh-win` | Target of the `install` target; `cmake --install <build> --prefix <dir>` overrides it per run. |
 
 ## Scripts
 
@@ -54,6 +55,7 @@ throw on failure.
 | `verify-reproducible.ps1` | Build twice in clean directories and compare the executables. |
 | `package.ps1` | Build, audit and write the binary and source ZIPs to `dist/`. |
 | `package-source.ps1` | Write only the corresponding-source ZIP. |
+| `install.ps1` | Build and install for the current user (`-Prefix`, `-SkipBuild`, `-AddToPath`, `-Uninstall`). |
 | `generate-unicode-width.py` | Regenerate or check `src/platform/unicode_width_table.h`. |
 
 The package version is read from `CMakeLists.txt`. To cut a new Windows
@@ -70,7 +72,7 @@ ctest --preset mingw64-release -R core.utf8    # one test
 ```
 
 Labels in use: `core`, `unit`, `launcher`, `integration`, `negative`,
-`regression`, `network`, `resilience`, `crypto`, `upstream`.
+`regression`, `network`, `resilience`, `crypto`, `upstream`, `install`.
 
 | Test | What it covers |
 | --- | --- |
@@ -86,6 +88,7 @@ Labels in use: `core`, `unit`, `launcher`, `integration`, `negative`,
 | `launcher.fake-ssh-e2e` | Full launcher flow; key only in the child environment. |
 | `launcher.post-connect-ssh-failure` | Tolerating an OpenSSH failure after `MOSH CONNECT`. |
 | `launcher.malformed-bootstrap` | Rejecting malformed bootstrap output. |
+| `install.layout` | `cmake --install` into a scratch prefix yields exactly the documented files, unchanged executables and a working `mosh.exe --version`. |
 
 ### End-to-end test against Linux
 

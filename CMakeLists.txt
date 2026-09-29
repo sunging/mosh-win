@@ -86,6 +86,7 @@ add_compile_options(${_mosh_source_map} ${_mosh_binary_map})
 
 include(Dependencies)
 include(MoshTargets)
+include(MoshInstall)
 
 if(MOSH_BUILD_TESTS)
   include(CTest)
@@ -96,18 +97,3 @@ if(MOSH_BUILD_TESTS)
     message(STATUS "tests/CMakeLists.txt is not present; test targets are deferred")
   endif()
 endif()
-
-include(GNUInstallDirs)
-foreach(_runtime IN ITEMS mosh-launcher mosh-client)
-  if(TARGET "${_runtime}")
-    install(TARGETS "${_runtime}" RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
-  endif()
-endforeach()
-install(FILES README.md LICENSE THIRD_PARTY_NOTICES.md
-  DESTINATION "${CMAKE_INSTALL_DOCDIR}")
-
-set(CPACK_PACKAGE_NAME "mosh-win")
-set(CPACK_PACKAGE_VERSION "${MOSH_WIN_VERSION}")
-set(CPACK_GENERATOR "ZIP")
-set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
-include(CPack)

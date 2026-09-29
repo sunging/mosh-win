@@ -116,6 +116,38 @@ python .\scripts\generate-unicode-width.py --download
 python .\scripts\generate-unicode-width.py --check
 ```
 
+## Installing
+
+`scripts/install.ps1` builds and tests the release, then installs it for the
+current user into `%LOCALAPPDATA%\Programs\mosh-win` (no administrator rights
+needed):
+
+```powershell
+.\scripts\install.ps1 -AddToPath     # also put <prefix>\bin on the user PATH
+.\scripts\install.ps1 -SkipBuild     # install the existing release build
+.\scripts\install.ps1 -Prefix C:\Tools\mosh-win
+.\scripts\install.ps1 -Uninstall     # remove the files and the PATH entry
+```
+
+It uses the regular CMake `install` target, which can also be run directly:
+
+```powershell
+cmake --install out\build\mingw64-release --prefix <dir>
+cmake --build --preset mingw64-release --target install   # into CMAKE_INSTALL_PREFIX
+```
+
+`CMAKE_INSTALL_PREFIX` defaults to `%ProgramW6432%\mosh-win` (normally
+`C:\Program Files\mosh-win`), which requires an elevated prompt. The layout is:
+
+| Path | Contents |
+| --- | --- |
+| `bin\` | `mosh.exe`, `mosh-client.exe` |
+| `share\doc\mosh-win\` | README, `LICENSE`, `THIRD_PARTY_NOTICES.md` |
+| `share\doc\mosh-win\licenses\` | Licenses of the statically linked runtime |
+
+`mosh.exe` finds `mosh-client.exe` next to itself, so keep both in the same
+directory.
+
 ## Usage
 
 Typical invocations:
@@ -155,13 +187,14 @@ and `MOSH_NO_TERM_INIT`. Suspend (`Ctrl-^ Ctrl-Z`) is not available on Windows.
 ```
 
 The script runs CTest and then checks the PE import tables of both
-executables. The 12 CTest tests cover the OCB/RFC vectors and tamper rejection,
+executables. The 13 CTest tests cover the OCB/RFC vectors and tamper rejection,
 the RNG and base64, protobuf/zlib state synchronization, the Unicode
 framebuffer, resize and the alternate screen, console restoration, IPv4/IPv6
 sockets and UTF-8 error text, and — over real loopback UDP — loss,
 duplication, reordering, source-port roaming and recovery from a virtual
 15-second outage. The launcher tests use a fake `ssh.exe` to check Windows
-argument quoting, remote shell quoting, bootstrap parsing and failure paths.
+argument quoting, remote shell quoting, bootstrap parsing and failure paths,
+and an install test checks the exact installed file layout.
 The PE audit rejects Cygwin/MSYS, MinGW C++ runtime, OpenSSL, protobuf, zlib
 and ncurses DLLs.
 
@@ -245,7 +278,8 @@ any binary:
 - `src/client/` — Windows client entry point and event loop.
 - `src/launcher/` — OpenSSH launcher, argument quoting and child environment.
 - `patches/series` — ordered patches applied to the pinned Mosh 1.4.0 source.
-- `cmake/` — toolchain, dependencies, targets and patch application.
+- `cmake/` — toolchain, dependencies, targets, install rules and patch
+  application.
 - `scripts/` — build, test and packaging scripts sharing `MoshWin.psm1`.
 - `tests/` — CTest suites, launcher fixtures and the Linux end-to-end test.
 

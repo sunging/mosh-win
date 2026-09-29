@@ -65,6 +65,26 @@ if(TARGET mosh-launcher)
     TIMEOUT 20)
 endif()
 
+if(TARGET mosh-launcher AND TARGET mosh-client)
+  # Install into a scratch prefix inside the build tree, never the configured
+  # CMAKE_INSTALL_PREFIX.
+  add_test(NAME install.layout
+    COMMAND "${CMAKE_COMMAND}"
+      "-DBUILD_DIR=${CMAKE_BINARY_DIR}"
+      "-DCONFIG=$<CONFIG>"
+      "-DPREFIX=${CMAKE_BINARY_DIR}/install-test"
+      "-DSOURCE_DIR=${PROJECT_SOURCE_DIR}"
+      "-DBINDIR=${CMAKE_INSTALL_BINDIR}"
+      "-DDOCDIR=${CMAKE_INSTALL_DOCDIR}"
+      "-DLAUNCHER=$<TARGET_FILE:mosh-launcher>"
+      "-DCLIENT=$<TARGET_FILE:mosh-client>"
+      "-DVERSION=${MOSH_WIN_VERSION}"
+      -P "${CMAKE_CURRENT_SOURCE_DIR}/install/assert_install_layout.cmake")
+  set_tests_properties(install.layout PROPERTIES
+    LABELS "install;integration"
+    TIMEOUT 60)
+endif()
+
 # Core tests include test_support.h, which reports failures under the test's
 # name, and headers from src/ (for example "platform/utf8.h").
 function(_mosh_use_test_support target test_name)

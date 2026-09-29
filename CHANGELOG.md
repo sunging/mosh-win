@@ -16,6 +16,9 @@ Versions are `<upstream Mosh version>-win<revision>`.
   of waiting for more input; streaming and one-shot decoding give identical
   results.
 - `secure_random()` splits requests larger than 4 GiB instead of throwing.
+- The `install` target defaults to `Program Files` instead of
+  `Program Files (x86)` and installs the licenses of the statically linked
+  runtime, like the binary ZIP.
 - Scripts resolve relative `-BuildDirectory` and `-DependencySourceRoot` paths
   against the PowerShell location rather than the process working directory.
 
@@ -41,6 +44,13 @@ Versions are `<upstream Mosh version>-win<revision>`.
   the host (Linux, `mosh-server`, UTF-8 locale) before starting Mosh, detects
   a missing console up front, and can run itself in a new console window
   (`-NewWindow`).
+
+### Added
+
+- `scripts/install.ps1` builds and installs for the current user without
+  administrator rights, optionally adds the install to the user `PATH`, and
+  uninstalls exactly what it installed.
+- The `install.layout` test checks the installed file layout.
 
 ## 1.4.0-win1
 
