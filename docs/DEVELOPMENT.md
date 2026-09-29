@@ -87,8 +87,29 @@ Labels in use: `core`, `unit`, `launcher`, `integration`, `negative`,
 | `launcher.post-connect-ssh-failure` | Tolerating an OpenSSH failure after `MOSH CONNECT`. |
 | `launcher.malformed-bootstrap` | Rejecting malformed bootstrap output. |
 
-`tests/wsl/run-e2e.ps1` is a manual interoperability test against a real
-Linux `mosh-server` in WSL2; it is not part of CTest.
+### End-to-end test against Linux
+
+`tests/e2e/run-e2e.ps1` runs the real chain — Windows OpenSSH, a Linux
+`mosh-server`, the native client over UDP — and passes only on a clean
+session shutdown. It is not part of CTest because it needs a Linux host and a
+real console.
+
+| Mode | Endpoint |
+| --- | --- |
+| `-Target [user@]host` | Any Linux host (machine, VM, cloud, container, WSL) reachable with key or agent SSH authentication and a known host key. Options: `-SshPort`, `-IdentityFile`, `-SshOption`, `-ServerAddress`, `-UdpPort`. |
+| `-Wsl [-Distro NAME]` | Starts `tests/e2e/wsl-sshd-fixture.sh`: a temporary sshd on port 22222 with a throw-away host key and client key, stopped afterwards (`-KeepFixture` leaves it running and prints how to use and stop it). |
+
+Every run first performs an SSH pre-flight that requires `uname -s` = Linux,
+`mosh-server` on the `PATH` and a UTF-8 locale (`locale charmap`), and fails
+with a specific message otherwise. `-SshOnly` stops after the pre-flight.
+The host must accept UDP from this machine on the port `mosh-server` picks
+(`-UdpPort` pins it, e.g. to match a firewall rule).
+
+`mosh-client.exe` refuses to run without a console, so the script checks
+for redirected standard handles up front. `-NewWindow` re-runs the script in
+a new console window with the same parameters, waits, prints the transcript
+body and propagates failure — use it from IDEs, agents or other non-console
+contexts.
 
 ### Adding a core test
 
@@ -144,9 +165,10 @@ cached between runs. Builds made with that archive are bit-identical to local
 builds made with the same toolchain, so the hashes in the CI summary can be
 compared directly with a local `out/build/mingw64-release/bin`.
 
-The WSL end-to-end test (`tests/wsl/run-e2e.ps1`) needs WSL2 and an
-interactive console, which hosted runners do not provide; run it locally
-before releases, from a real terminal window.
+The end-to-end test (`tests/e2e/run-e2e.ps1`) needs a Linux host with
+`mosh-server` and an interactive console, which hosted runners do not provide;
+run it locally before releases, against a Linux machine (`-Target`) or WSL
+(`-Wsl`).
 
 ## Commits
 

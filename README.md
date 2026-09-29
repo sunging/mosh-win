@@ -165,22 +165,37 @@ argument quoting, remote shell quoting, bootstrap parsing and failure paths.
 The PE audit rejects Cygwin/MSYS, MinGW C++ runtime, OpenSSL, protobuf, zlib
 and ncurses DLLs.
 
-`tests/wsl/run-e2e.ps1` runs an interoperability test against WSL2 Ubuntu: it
-starts a temporary high-port `sshd` and the Linux `mosh-server`, then goes
-Windows OpenSSH → Linux server → native UDP client. The fixture installs no
-Windows service, stores no credentials, and its temporary processes should be
-stopped afterwards.
+`tests/e2e/run-e2e.ps1` is an end-to-end interoperability test, Windows
+OpenSSH → Linux `mosh-server` → native UDP client, that passes only if the
+session shuts down cleanly. It works against **any Linux host** — a physical
+machine, VM, cloud instance, container or WSL distribution — that has
+`mosh-server` and a UTF-8 locale, accepts non-interactive SSH authentication
+(key or agent, with a known host key) and can receive Mosh UDP traffic from
+this machine:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\tests\wsl\run-e2e.ps1 `
-  -Distro Ubuntu -InstallOpenSshServer
+.\tests\e2e\run-e2e.ps1 -Target user@linux-host
+.\tests\e2e\run-e2e.ps1 -Target user@linux-host -SshPort 2222 `
+  -IdentityFile $env:USERPROFILE\.ssh\id_ed25519 -UdpPort 60001
 ```
 
-`-InstallOpenSshServer` installs packages only if the distribution lacks
-`sshd`. Run the test from a real terminal window: `mosh-client.exe` requires a
-console and exits immediately when its standard handles are pipes. The fixture
-always runs with a temporary configuration, a high port and
-a temporary key, and never enables a persistent service. Some Windows OpenSSH
+A pre-flight SSH check verifies that the host is Linux, has `mosh-server` and
+uses a UTF-8 locale, and reports a clear error otherwise. `-SshOption` passes
+extra OpenSSH arguments and `-ServerAddress` overrides the UDP address.
+
+Without a Linux machine at hand, `-Wsl` starts a temporary, key-only `sshd` on
+a high port inside a local WSL distribution and tests against it. It installs
+no Windows service, stores no credentials and stops its processes afterwards;
+`-InstallOpenSshServer` installs `openssh-server` only if the distribution
+lacks `sshd`:
+
+```powershell
+.\tests\e2e\run-e2e.ps1 -Wsl -Distro Ubuntu -InstallOpenSshServer
+```
+
+`mosh-client.exe` requires a real console, so run the test from a terminal
+window, or add `-NewWindow` to run it in a new console window and print its
+result here (useful from IDEs and automation). Some Windows OpenSSH
 9.5 builds can return an abnormal exit code even after the remote command
 succeeded ([Win32-OpenSSH #1899](https://github.com/PowerShell/Win32-OpenSSH/issues/1899)).
 The launcher tolerates that exit only after it has strictly parsed a valid
@@ -232,7 +247,7 @@ any binary:
 - `patches/series` — ordered patches applied to the pinned Mosh 1.4.0 source.
 - `cmake/` — toolchain, dependencies, targets and patch application.
 - `scripts/` — build, test and packaging scripts sharing `MoshWin.psm1`.
-- `tests/` — CTest suites, launcher fixtures and the WSL end-to-end test.
+- `tests/` — CTest suites, launcher fixtures and the Linux end-to-end test.
 
 The FetchContent upstream directory is a build artifact. Do not edit
 `out/build/*/_deps/mosh_upstream-src`; keep changes as patches in `patches/`

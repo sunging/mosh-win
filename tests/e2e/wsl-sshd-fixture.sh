@@ -9,7 +9,7 @@ AUTHORIZED_KEY_B64="${3:-}"
 LOGIN_USER="${4:-}"
 
 die() {
-  printf 'sshd-fixture: %s\n' "$*" >&2
+  printf 'wsl-sshd-fixture: %s\n' "$*" >&2
   exit 1
 }
 

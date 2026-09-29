@@ -36,6 +36,11 @@ Versions are `<upstream Mosh version>-win<revision>`.
   check and Unicode table verification, using a SHA-256-pinned toolchain.
 - Every project source carries an `SPDX-License-Identifier:
   GPL-3.0-or-later` tag.
+- The end-to-end test moved to `tests/e2e/` and runs against any Linux host
+  (`-Target user@host`) as well as a temporary WSL fixture (`-Wsl`). It checks
+  the host (Linux, `mosh-server`, UTF-8 locale) before starting Mosh, detects
+  a missing console up front, and can run itself in a new console window
+  (`-NewWindow`).
 
 ## 1.4.0-win1
 
