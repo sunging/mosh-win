@@ -2,6 +2,15 @@
 
 Versions are `<upstream Mosh version>-win<revision>`.
 
+## Unreleased
+
+### Fixed
+
+- `SHA256SUMS.txt` files are written with LF line endings, so
+  `sha256sum -c` accepts them on Linux and macOS. (The 1.4.0-win2 release
+  asset was replaced with an LF copy; the manifests inside its ZIPs still use
+  CRLF.)
+
 ## 1.4.0-win2
 
 ### Fixed

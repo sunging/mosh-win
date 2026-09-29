@@ -77,7 +77,7 @@ try {
     }
     $archives | Sort-Object | ForEach-Object {
         "$(Get-Sha256 $_)  $(Split-Path -Leaf $_)"
-    } | Set-Content -LiteralPath (Join-Path $distDir 'SHA256SUMS.txt') -Encoding ascii
+    } | Set-LfContent -Path (Join-Path $distDir 'SHA256SUMS.txt')
 } finally {
     Pop-Location
 }

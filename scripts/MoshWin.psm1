@@ -123,9 +123,25 @@ function Write-Sha256Manifest {
     Get-ChildItem -LiteralPath $Directory -File -Recurse | Sort-Object FullName | ForEach-Object {
         $relative = $_.FullName.Substring($prefix.Length).Replace('\', '/')
         "$(Get-Sha256 $_.FullName)  $relative"
-    } | Set-Content -LiteralPath $Output -Encoding ascii
+    } | Set-LfContent -Path $Output
+}
+function Set-LfContent {
+    <#
+    Writes lines as ASCII with LF line endings, as sha256sum -c expects them
+    on every platform (Set-Content would use CRLF on Windows).
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(ValueFromPipeline)][string[]]$Line
+    )
+    begin { $lines = [Collections.Generic.List[string]]::new() }
+    process { foreach ($item in $Line) { $lines.Add($item) } }
+    end {
+        $text = if ($lines.Count) { ($lines -join "`n") + "`n" } else { "" }
+        [IO.File]::WriteAllText($Path, $text, [Text.Encoding]::ASCII)
+    }
 }
 
 Export-ModuleMember -Function Get-MoshWinRoot, Resolve-MoshWinPath, Get-MoshWinVersion,
     Get-MoshWinPreset, Get-MoshWinDependencyNames, Get-MingwRoot, Invoke-Native,
-    Invoke-Robocopy, Reset-Directory, Get-Sha256, Write-Sha256Manifest
+    Invoke-Robocopy, Reset-Directory, Get-Sha256, Write-Sha256Manifest, Set-LfContent
