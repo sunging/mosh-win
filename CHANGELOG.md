@@ -32,6 +32,10 @@ Versions are `<upstream Mosh version>-win<revision>`.
   leaves the release executables bit-identical.
 - Documentation is in English and now includes `docs/ARCHITECTURE.md`,
   `docs/PATCHES.md` and `docs/DEVELOPMENT.md`.
+- GitHub Actions CI: release build and tests, PE import audit, reproducibility
+  check and Unicode table verification, using a SHA-256-pinned toolchain.
+- Every project source carries an `SPDX-License-Identifier:
+  GPL-3.0-or-later` tag.
 
 ## 1.4.0-win1
 

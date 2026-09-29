@@ -1,0 +1,54 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Set up MinGW-w64 GCC 15.1.0 (UCRT)
+description: >
+  Installs the pinned MinGW-Builds x86_64 posix-seh UCRT GCC 15.1.0
+  toolchain, verifies its SHA-256 and exports MINGW64_ROOT. CMake refuses
+  any other compiler, so every build uses exactly this toolchain.
+
+inputs:
+  release:
+    description: niXman/mingw-builds-binaries release tag
+    default: 15.1.0-rt_v12-rev0
+  asset:
+    description: Release asset to install
+    default: x86_64-15.1.0-release-posix-seh-ucrt-rt_v12-rev0.7z
+  sha256:
+    description: Expected SHA-256 of the asset
+    default: c83e2ae8af805aa2a5d458f6001f67152c8d88b5d4f74a84bcf3e9322e5d40f3
+
+runs:
+  using: composite
+  steps:
+    - name: Cache toolchain archive
+      uses: actions/cache@v6
+      with:
+        path: ${{ runner.temp }}/mingw-archive
+        key: mingw-${{ inputs.asset }}-${{ inputs.sha256 }}
+
+    - name: Install toolchain
+      shell: pwsh
+      env:
+        MINGW_RELEASE: ${{ inputs.release }}
+        MINGW_ASSET: ${{ inputs.asset }}
+        MINGW_SHA256: ${{ inputs.sha256 }}
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $archiveDir = Join-Path $env:RUNNER_TEMP 'mingw-archive'
+        New-Item -ItemType Directory -Force -Path $archiveDir | Out-Null
+        $archive = Join-Path $archiveDir $env:MINGW_ASSET
+        if (-not (Test-Path -LiteralPath $archive)) {
+          $url = "https://github.com/niXman/mingw-builds-binaries/releases/download/$env:MINGW_RELEASE/$env:MINGW_ASSET"
+          Invoke-WebRequest -Uri $url -OutFile $archive
+        }
+        $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $archive).Hash.ToLowerInvariant()
+        if ($hash -ne $env:MINGW_SHA256) {
+          Remove-Item -LiteralPath $archive -Force
+          throw "Toolchain archive SHA-256 mismatch: $hash"
+        }
+        # Extracts to <temp>/mingw64. Keep the path short: mingw32-make is
+        # not long-path aware.
+        7z x $archive "-o$env:RUNNER_TEMP" -y | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "7z failed with exit code $LASTEXITCODE" }
+        $root = Join-Path $env:RUNNER_TEMP 'mingw64'
+        & (Join-Path $root 'bin/gcc.exe') --version
+        "MINGW64_ROOT=$root" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8

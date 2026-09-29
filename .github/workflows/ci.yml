@@ -1,0 +1,102 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# The pinned toolchain (MinGW-Builds GCC 15.1.0, x86_64, posix, SEH, UCRT)
+# is defined in .github/actions/setup-mingw.
+
+jobs:
+  build-test:
+    name: Build and test (Release)
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup-mingw
+
+      - name: Configure, build and run CTest
+        run: ./scripts/build.ps1 -Configuration Release
+
+      - name: CTest and PE import audit
+        run: ./scripts/test.ps1 -Configuration Release
+
+      - name: Record executable hashes
+        run: |
+          $bin = 'out/build/mingw64-release/bin'
+          $lines = foreach ($name in 'mosh.exe', 'mosh-client.exe') {
+            $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath "$bin/$name").Hash.ToLowerInvariant()
+            "| ``$name`` | ``$hash`` |"
+          }
+          @('| Executable | SHA-256 |', '| --- | --- |') + $lines |
+            Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+      - name: Upload executables
+        uses: actions/upload-artifact@v7
+        with:
+          name: mosh-win-x64
+          path: |
+            out/build/mingw64-release/bin/mosh.exe
+            out/build/mingw64-release/bin/mosh-client.exe
+          if-no-files-found: error
+
+      - name: Upload test logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ctest-logs
+          path: out/build/mingw64-release/Testing/Temporary/
+          if-no-files-found: ignore
+
+  reproducible:
+    name: Reproducible build
+    runs-on: windows-latest
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup-mingw
+
+      - name: Build twice and compare executables
+        run: ./scripts/verify-reproducible.ps1
+
+  checks:
+    name: Repository checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Unicode width table matches pinned Unicode data
+        run: >
+          python scripts/generate-unicode-width.py --download --check
+          --data-dir "$RUNNER_TEMP/unicode-data"
+
+      - name: No CRLF line endings in the index
+        run: |
+          crlf=$(git ls-files --eol | awk '$1 ~ /crlf/ {print $NF}')
+          if [ -n "$crlf" ]; then
+            echo "Files stored with CRLF line endings:"; echo "$crlf"; exit 1
+          fi

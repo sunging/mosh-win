@@ -1,5 +1,8 @@
 # mosh-win
 
+[![CI](https://github.com/sunging/mosh-win/actions/workflows/ci.yml/badge.svg)](https://github.com/sunging/mosh-win/actions/workflows/ci.yml)
+[![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue.svg)](LICENSE)
+
 `mosh-win` is a native x64 Windows client port of [Mosh](https://mosh.org/)
 1.4.0, the mobile shell. It builds only the client; there is no Windows
 `mosh-server`.
@@ -174,7 +177,9 @@ powershell -ExecutionPolicy Bypass -File .\tests\wsl\run-e2e.ps1 `
 ```
 
 `-InstallOpenSshServer` installs packages only if the distribution lacks
-`sshd`; the fixture always runs with a temporary configuration, a high port and
+`sshd`. Run the test from a real terminal window: `mosh-client.exe` requires a
+console and exits immediately when its standard handles are pipes. The fixture
+always runs with a temporary configuration, a high port and
 a temporary key, and never enables a persistent service. Some Windows OpenSSH
 9.5 builds can return an abnormal exit code even after the remote command
 succeeded ([Win32-OpenSSH #1899](https://github.com/PowerShell/Win32-OpenSSH/issues/1899)).

@@ -126,6 +126,28 @@ administrator rights.
 - Documentation and comments are written in English.
 - Do not commit local paths, user names or machine-specific settings.
 
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on every push to `main`, on pull requests and
+on demand:
+
+| Job | Runner | What it does |
+| --- | --- | --- |
+| Build and test | `windows-latest` | Release build with online FetchContent, CTest, PE import audit; publishes the executables as an artifact and their SHA-256 in the job summary. |
+| Reproducible build | `windows-latest` | `scripts/verify-reproducible.ps1` (two clean builds, compared bit for bit). |
+| Repository checks | `ubuntu-latest` | Regenerates the Unicode width table from the pinned, hash-verified Unicode data and compares it; rejects files stored with CRLF. |
+
+The toolchain is installed by the composite action
+`.github/actions/setup-mingw`: the MinGW-Builds release
+`x86_64-15.1.0-release-posix-seh-ucrt-rt_v12-rev0`, pinned by SHA-256 and
+cached between runs. Builds made with that archive are bit-identical to local
+builds made with the same toolchain, so the hashes in the CI summary can be
+compared directly with a local `out/build/mingw64-release/bin`.
+
+The WSL end-to-end test (`tests/wsl/run-e2e.ps1`) needs WSL2 and an
+interactive console, which hosted runners do not provide; run it locally
+before releases, from a real terminal window.
+
 ## Commits
 
 Keep commits focused and explain *why* in the message body. Before
