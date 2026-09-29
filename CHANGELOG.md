@@ -2,7 +2,7 @@
 
 Versions are `<upstream Mosh version>-win<revision>`.
 
-## Unreleased
+## 1.4.0-win2
 
 ### Fixed
 
@@ -21,6 +21,9 @@ Versions are `<upstream Mosh version>-win<revision>`.
   runtime, like the binary ZIP.
 - Scripts resolve relative `-BuildDirectory` and `-DependencySourceRoot` paths
   against the PowerShell location rather than the process working directory.
+- The corresponding-source package takes the project files Git sees, so
+  ignored output such as an IDE's `cmake-build-*` directory no longer ends up
+  in it.
 
 ### Changed
 

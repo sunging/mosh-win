@@ -11,7 +11,7 @@ project(mosh-win
 # upstream Mosh release; the revision counts Windows-port releases on top of
 # it.  Scripts read these two lines, so keep them literal.
 set(MOSH_UPSTREAM_VERSION "${PROJECT_VERSION}")
-set(MOSH_WIN_PACKAGE_REVISION "win1")
+set(MOSH_WIN_PACKAGE_REVISION "win2")
 set(MOSH_WIN_VERSION "${MOSH_UPSTREAM_VERSION}-${MOSH_WIN_PACKAGE_REVISION}")
 
 if(NOT WIN32 OR NOT MINGW)
